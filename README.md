@@ -10,15 +10,15 @@ The pipeline processes files end-to-end entirely on your local machine:
 
 ```mermaid
 graph TD
-    A[Audio or Video Input] --> B[Audio Extraction & Normalization]
+    A[Audio/Video Input or YT URL] --> B[Audio Extraction & Normalization]
     B -->|Convert to WAV 16kHz Mono| C[Transcription with faster-whisper]
-    C -->|Generate transcript.txt| D[LLM Meeting Points with local Ollama]
-    D -->|Generate meeting_points.md| E[Outputs: Transcript + Summary + Metadata]
+    C -->|Generate transcript.srt| D[LLM Meeting Points with local Ollama]
+    D -->|Generate meeting_points.md| E[Outputs: Subtitles + Summary + Metadata]
 ```
 
-1. **Audio/Video Extraction & Normalization**: The input file (e.g., `.mp3`, `.mp4`, `.wav`, `.mkv`) is processed via `ffmpeg` to extract the audio channel and normalize it into a standard format: PCM 16-bit, 16000Hz, mono WAV.
-2. **Transcription**: The normalized audio is transcribed using the **`faster-whisper`** library.
-3. **Summarization (Local LLM)**: The transcript is fed to a local instance of **Ollama** (defaulting to the `gemma:2b` model) to construct structural meeting bullet points (Key Points, Decisions, Actions, and Pendencies) in Portuguese.
+1. **Audio/Video Extraction & Normalization**: The input file (e.g., `.mp3`, `.mp4`, `.wav`, `.mkv`) or YouTube URL is processed via `ffmpeg` or `yt-dlp` to extract the audio channel and normalize it into a standard format: PCM 16-bit, 16000Hz, mono WAV.
+2. **Transcription**: The normalized audio is transcribed using the **`faster-whisper`** library, generating a `.srt` subtitle file.
+3. **Summarization (Local LLM)**: The transcript is fed to a local instance of **Ollama** (defaulting to the `gemma:2b` model) to construct structural meeting bullet points (Key Points, Decisions, Actions, and Pendencies) in Portuguese. Transcripts exceeding context windows are automatically chunked and consolidated.
 
 ---
 
@@ -31,7 +31,8 @@ Before running the pipeline, ensure you have the following installed on your sys
 3. **FFmpeg** — Required for audio extraction and format normalization.
    * *Linux*: `sudo apt install ffmpeg` (or your distro's package manager)
    * *macOS*: `brew install ffmpeg`
-4. **[Ollama](https://ollama.com/)** — Running locally with your model of choice pulled:
+4. **yt-dlp** — Required for downloading audio from YouTube URLs.
+5. **[Ollama](https://ollama.com/)** — Running locally with your model of choice pulled:
    ```bash
    ollama pull gemma:2b
    ```
@@ -55,13 +56,14 @@ This will automatically create a virtual environment, install all dependencies (
 Run the pipeline using `uv run`:
 
 ```bash
-uv run meeting-pipeline <path_to_audio_or_video_file> [OPTIONS]
+uv run meeting-pipeline --target <path_to_audio_or_video_file_or_youtube_url> [OPTIONS]
 ```
 
 ### Options
 
 | Option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
+| `--target` | `str` | *Required* | Path to local media file or YouTube URL |
 | `--output-dir` | `Path` | `output` | Directory where output files will be saved |
 | `--whisper-model` | `str` | `small` | Whisper model size (`tiny`, `base`, `small`, `medium`, `large-v3`, etc.) |
 | `--whisper-device` | `str` | `cpu` | Device to run Whisper inference on (`cpu` or `cuda`) |
@@ -74,12 +76,17 @@ uv run meeting-pipeline <path_to_audio_or_video_file> [OPTIONS]
 
 **Standard Audio Run:**
 ```bash
-uv run meeting-pipeline sample.mp3 --whisper-model small --language pt
+uv run meeting-pipeline --target sample.mp3 --whisper-model small --language pt
+```
+
+**YouTube URL Run:**
+```bash
+uv run meeting-pipeline --target "https://www.youtube.com/watch?v=dQw4w9WgXcQ" --whisper-model small --language pt
 ```
 
 **Fast / Low-Resource Run:**
 ```bash
-uv run meeting-pipeline sample.mp3 --whisper-model tiny --language pt --verbose
+uv run meeting-pipeline --target sample.mp3 --whisper-model tiny --language pt --verbose
 ```
 
 ---
@@ -113,11 +120,11 @@ Once `.env` is configured, you can run all Docker Compose commands normally with
 2. **Execute the pipeline**:
    * **On CPU**:
      ```bash
-     docker compose run --rm app sample.mp3 --whisper-model tiny --whisper-device cpu --language pt
+     docker compose run --rm app --target sample.mp3 --whisper-model tiny --whisper-device cpu --language pt
      ```
    * **On GPU** (ensure GPU is enabled in `.env` and nvidia runtime is active):
      ```bash
-     docker compose run --rm app sample.mp3 --whisper-model tiny --whisper-device cuda --language pt
+     docker compose run --rm app --target sample.mp3 --whisper-model tiny --whisper-device cuda --language pt
      ```
 
 The output files will be written directly to the host's `output/` directory. HuggingFace and Ollama caches are persisted in docker volumes so that subsequent runs do not re-download the models.
@@ -128,9 +135,10 @@ The output files will be written directly to the host's `output/` directory. Hug
 
 All outputs are saved to the designated `--output-dir` (default: `output/`):
 * **`normalized.wav`**: The 16kHz mono audio track extracted/normalized from the input.
-* **`transcript.txt`**: The full text transcription of the meeting.
+* **`transcript.srt`**: The full transcription in SubRip (.srt) format with timestamps.
 * **`transcript_metadata.json`**: Metadata containing runtime parameters, detected language, and duration.
 * **`meeting_points.md`**: Markdown document summarizing main points, decisions, actions, and pendencies in Portuguese.
+
 
 ---
 

@@ -5,10 +5,14 @@ from pathlib import Path
 
 import typer
 
+import time
+
+from .audio import download_youtube_audio
 from .pipeline import run_pipeline
 
 app = typer.Typer(add_completion=False)
 logger = logging.getLogger(__name__)
+
 
 
 def configure_logging(verbose: bool) -> None:
@@ -21,7 +25,11 @@ def configure_logging(verbose: bool) -> None:
 
 @app.command()
 def main(
-    input_file: Path = typer.Argument(..., exists=True, readable=True),
+    target: str = typer.Option(
+        ...,
+        "--target",
+        help="Input file path or YouTube URL of the video/audio to process.",
+    ),
     output_dir: Path = typer.Option(Path("output"), "--output-dir"),
     whisper_model: str = typer.Option("small", "--whisper-model"),
     whisper_device: str = typer.Option("cpu", "--whisper-device"),
@@ -32,9 +40,31 @@ def main(
 ) -> None:
     configure_logging(verbose)
 
+    is_url = (
+        target.startswith(("http://", "https://", "www."))
+        or "youtube.com" in target
+        or "youtu.be" in target
+    )
+
+    temp_file: Path | None = None
+
     try:
+        if is_url:
+            t0 = time.perf_counter()
+            temp_file = download_youtube_audio(target)
+            t_dl = time.perf_counter() - t0
+            logger.info("YouTube audio download completed in %.2fs", t_dl)
+            input_path = temp_file
+
+        else:
+            input_path = Path(target)
+            if not input_path.exists():
+                logger.error("Input file does not exist: %s", input_path)
+                typer.echo(f"Error: Input file does not exist: {input_path}", err=True)
+                raise typer.Exit(code=1)
+
         transcript_path, summary_path = run_pipeline(
-            input_path=input_file,
+            input_path=input_path,
             output_dir=output_dir,
             whisper_model=whisper_model,
             whisper_device=whisper_device,
@@ -42,9 +72,22 @@ def main(
             llm_model=llm_model,
             language=language,
         )
+        typer.echo(f"Transcript: {transcript_path}")
+        typer.echo(f"Meeting points: {summary_path}")
+
+    except KeyboardInterrupt:
+        typer.echo("\nProcess interrupted by user. Exiting...", err=True)
+        raise typer.Exit(code=130)
+    except typer.Exit:
+        raise
     except Exception:
         logger.exception("Pipeline execution failed")
         raise typer.Exit(code=1)
+    finally:
+        if temp_file and temp_file.exists():
+            try:
+                temp_file.unlink()
+                logger.info("Deleted temporary YouTube audio file: %s", temp_file)
+            except Exception as e:
+                logger.warning("Failed to delete temporary file %s: %s", temp_file, e)
 
-    typer.echo(f"Transcript: {transcript_path}")
-    typer.echo(f"Meeting points: {summary_path}")

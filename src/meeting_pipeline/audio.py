@@ -5,6 +5,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import uuid
+
 logger = logging.getLogger(__name__)
 
 
@@ -14,6 +16,50 @@ def ensure_ffmpeg() -> None:
 
     logger.error("ffmpeg not found in PATH")
     raise RuntimeError("ffmpeg not found in PATH")
+
+
+def ensure_yt_dlp() -> None:
+    if shutil.which("yt-dlp"):
+        return
+
+    logger.error("yt-dlp not found in PATH")
+    raise RuntimeError("yt-dlp not found in PATH")
+
+
+def download_youtube_audio(url: str) -> Path:
+    ensure_yt_dlp()
+    temp_dir = Path("/tmp")
+    output_filename = f"meeting_yt_{uuid.uuid4().hex}"
+    output_path = temp_dir / f"{output_filename}.wav"
+
+    command = [
+        "yt-dlp",
+        "-x",
+        "--audio-format",
+        "wav",
+        "-o",
+        str(temp_dir / f"{output_filename}.%(ext)s"),
+        url,
+    ]
+
+    logger.info("Downloading YouTube audio from %s...", url)
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if result.returncode != 0:
+        logger.error("yt-dlp failed: %s", result.stderr.strip())
+        raise RuntimeError(f"Failed to download YouTube audio: {result.stderr.strip()}")
+
+    if not output_path.exists():
+        logger.error("Downloaded file not found at %s", output_path)
+        raise RuntimeError("Downloaded YouTube audio file not found")
+
+    return output_path
+
 
 
 def extract_audio(input_path: Path, output_path: Path) -> Path:
