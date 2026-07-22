@@ -1,0 +1,21 @@
+# Build & Git artifacts
+.git
+.gitignore
+.venv
+.agents
+.ai-jail
+.pytest_cache
+.ruff_cache
+output/
+
+# Media and temporary files
+*.mp4
+*.mp3
+*.wav
+*.mkv
+*.run
+todo.md
+
+# Ignore markdown files except README.md required by build
+*.md
+!README.md

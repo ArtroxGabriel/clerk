@@ -1,43 +1,60 @@
-FROM python:3.14-slim
+FROM python:3.14-slim AS builder
 
-# Install system dependencies (ffmpeg is required for audio extraction/normalization)
+# Build-time system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
     curl \
     ca-certificates \
-    && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+    && curl -fL https://github.com/yt-dlp/yt-dlp/releases/download/2026.07.04/yt-dlp -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp \
     && rm -rf /var/lib/apt/lists/*
 
+# Pin uv to a specific version (not :latest)
+COPY --from=ghcr.io/astral-sh/uv:0.7.13 /uv /uvx /bin/
 
-# Copy uv binary from official image
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-
-# Set working directory inside the container for the application installation
 WORKDIR /app
 
-# Enable bytecode compilation
 ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
 
-# Copy dependency files
+# Install dependencies first (better layer caching)
 COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --no-dev --extra cuda
 
-# Install project dependencies including the CUDA extra libraries
-RUN uv sync --frozen --no-install-project --no-dev --extra cuda
-
-# Copy project source files
+# Copy source and install the project itself
 COPY src/ ./src/
 COPY README.md ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --extra cuda
 
-# Build/install the project with the CUDA extra
-RUN uv sync --frozen --no-dev --extra cuda
 
-# Expose the virtual environment bin folder in PATH
+# ---------- Stage 2: runtime ----------
+FROM python:3.14-slim AS runtime
+
+# ffmpeg + ca-certificates are the only runtime system deps needed
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root user
+RUN groupadd --system app && useradd --system --gid app --home /app --shell /usr/sbin/nologin app
+
+WORKDIR /app
+
+# Bring in only what's needed at runtime — no uv, no curl, no build cache
+COPY --from=builder /usr/local/bin/yt-dlp /usr/local/bin/yt-dlp
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/src /app/src
+COPY --from=builder /app/README.md /app/README.md
+
 ENV PATH="/app/.venv/bin:$PATH"
 ENV LD_LIBRARY_PATH="/app/.venv/lib/python3.14/site-packages/nvidia/cublas/lib:/app/.venv/lib/python3.14/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH}"
 
-# Default directory for mount-based execution
+# Default directory for mount-based execution — owned by the app user
 WORKDIR /workspace
+RUN chown app:app /workspace
 
-# Run the CLI tool
+USER app
+
 ENTRYPOINT ["meeting-pipeline"]
