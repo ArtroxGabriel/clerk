@@ -1,0 +1,35 @@
+[project]
+name = "meeting-pipeline"
+version = "0.1.0"
+description = "Local pipeline for transcription and meeting bullet points"
+readme = "README.md"
+authors = [{ name = "Gabrigas", email = "artroxgabriel@gmail.com" }]
+requires-python = ">=3.14"
+dependencies = [
+    "faster-whisper>=1.2.1",
+    "httpx>=0.28.1",
+    "pydantic>=2.13.4",
+    "rich>=15.0.0",
+    "typer>=0.27.0",
+]
+
+[tool.pyrefly]
+project-includes = [
+    "**/*.py*",
+    "**/*.ipynb",
+]
+
+[project.scripts]
+meeting-pipeline = "meeting_pipeline.cli:app"
+meeting-pipeline-test = "pytest:main"
+
+[build-system]
+requires = ["uv_build>=0.11.28,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pyrefly>=0.1.0",
+    "pytest>=9.1.1",
+    "ruff>=0.15.22",
+]
