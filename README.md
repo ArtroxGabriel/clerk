@@ -88,19 +88,37 @@ uv run meeting-pipeline sample.mp3 --whisper-model tiny --language pt --verbose
 
 You can also run the entire pipeline, including a local instance of Ollama, using Docker Compose.
 
-### How to Run
+### ⚙️ Configuration (CPU vs GPU)
+
+Copy the `.env.example` template to `.env`:
+```bash
+cp .env.example .env
+```
+
+By default, `.env` is configured to run on **CPU**. If you have an NVIDIA GPU and want to enable GPU acceleration (using the overlay file `docker-compose.gpu.yaml`), edit the `.env` file and configure it as follows:
+```env
+# Enable GPU acceleration (uncomment this line and comment out the CPU-only one)
+COMPOSE_FILE=docker-compose.yaml:docker-compose.gpu.yaml
+```
+
+Once `.env` is configured, you can run all Docker Compose commands normally without specifying `-f`.
+
+### 🚀 How to Run
 
 1. **Start the services**:
-   This starts the Ollama container and automatically pulls the `gemma:2b` model (this may take a few minutes on the first run):
    ```bash
    docker compose up -d
    ```
 
 2. **Execute the pipeline**:
-   To process an audio or video file located in your project directory (e.g., `sample.mp3`):
-   ```bash
-   docker compose run --rm app sample.mp3 --whisper-model tiny --language pt
-   ```
+   * **On CPU**:
+     ```bash
+     docker compose run --rm app sample.mp3 --whisper-model tiny --whisper-device cpu --language pt
+     ```
+   * **On GPU** (ensure GPU is enabled in `.env` and nvidia runtime is active):
+     ```bash
+     docker compose run --rm app sample.mp3 --whisper-model tiny --whisper-device cuda --language pt
+     ```
 
 The output files will be written directly to the host's `output/` directory. HuggingFace and Ollama caches are persisted in docker volumes so that subsequent runs do not re-download the models.
 

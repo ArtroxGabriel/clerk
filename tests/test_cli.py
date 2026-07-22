@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from unittest.mock import patch
-import pytest
 from typer.testing import CliRunner
 
 from meeting_pipeline.cli import app
