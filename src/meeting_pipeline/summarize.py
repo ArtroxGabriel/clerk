@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 import httpx
 
@@ -32,9 +33,11 @@ Transcrição:
 def summarize_transcript(
     transcript: str,
     model_name: str = "gemma:2b",
-    base_url: str = "http://127.0.0.1:11434",
+    base_url: str | None = None,
     timeout_seconds: float = 300.0,
 ) -> str:
+    if base_url is None:
+        base_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
     if not transcript.strip():
         logger.error("Transcript is empty")
         raise ValueError("transcript is empty")

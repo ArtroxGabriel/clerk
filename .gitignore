@@ -10,5 +10,6 @@ wheels/
 .venv
 
 *.mp3
+*.run
 
 output/

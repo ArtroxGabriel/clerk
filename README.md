@@ -84,6 +84,28 @@ uv run meeting-pipeline sample.mp3 --whisper-model tiny --language pt --verbose
 
 ---
 
+## 🐳 Docker & Docker Compose
+
+You can also run the entire pipeline, including a local instance of Ollama, using Docker Compose.
+
+### How to Run
+
+1. **Start the services**:
+   This starts the Ollama container and automatically pulls the `gemma:2b` model (this may take a few minutes on the first run):
+   ```bash
+   docker compose up -d
+   ```
+
+2. **Execute the pipeline**:
+   To process an audio or video file located in your project directory (e.g., `sample.mp3`):
+   ```bash
+   docker compose run --rm app sample.mp3 --whisper-model tiny --language pt
+   ```
+
+The output files will be written directly to the host's `output/` directory. HuggingFace and Ollama caches are persisted in docker volumes so that subsequent runs do not re-download the models.
+
+---
+
 ## 📁 Outputs
 
 All outputs are saved to the designated `--output-dir` (default: `output/`):

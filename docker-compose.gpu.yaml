@@ -1,0 +1,44 @@
+services:
+  app:
+    build: .
+    volumes:
+      - .:/workspace
+      - huggingface-cache:/root/.cache/huggingface
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+    depends_on:
+      ollama-pull-model:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  ollama-pull-model:
+    image: ollama/ollama:latest
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    command: ["pull", "gemma:2b"]
+    depends_on:
+      - ollama
+
+volumes:
+  ollama-data:
+  huggingface-cache:
