@@ -37,9 +37,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Non-root user
-RUN groupadd --system app && useradd --system --gid app --home /app --shell /usr/sbin/nologin app
-
 WORKDIR /app
 
 # Bring in only what's needed at runtime — no uv, no curl, no build cache
@@ -51,10 +48,12 @@ COPY --from=builder /app/README.md /app/README.md
 ENV PATH="/app/.venv/bin:$PATH"
 ENV LD_LIBRARY_PATH="/app/.venv/lib/python3.14/site-packages/nvidia/cublas/lib:/app/.venv/lib/python3.14/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH}"
 
-# Default directory for mount-based execution — owned by the app user
+# Default directory for mount-based execution
 WORKDIR /workspace
-RUN chown app:app /workspace
 
-USER app
+# Healthcheck to verify CLI executable and python runtime
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD ["meeting-pipeline", "--help"]
 
 ENTRYPOINT ["meeting-pipeline"]
+

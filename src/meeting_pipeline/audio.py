@@ -68,7 +68,19 @@ def extract_audio(input_path: Path, output_path: Path) -> Path:
         raise FileNotFoundError(input_path)
 
     ensure_ffmpeg()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+    except PermissionError as e:
+        logger.error("Permission denied creating output directory %s: %s", output_path.parent, e)
+        raise PermissionError(f"Permission denied creating directory {output_path.parent}. Check write permissions.") from e
+
+    if output_path.exists():
+        try:
+            output_path.unlink()
+        except PermissionError as e:
+            logger.error("Permission denied removing existing output file %s: %s", output_path, e)
+            raise PermissionError(f"Permission denied modifying {output_path}. Check file write permissions.") from e
 
     command = [
         "ffmpeg",
@@ -95,5 +107,9 @@ def extract_audio(input_path: Path, output_path: Path) -> Path:
     if result.returncode == 0:
         return output_path
 
-    logger.error("ffmpeg failed: %s", result.stderr.strip())
+    stderr_msg = result.stderr.strip()
+    logger.error("ffmpeg failed: %s", stderr_msg)
+    if "Permission denied" in stderr_msg:
+        raise PermissionError(f"Permission denied writing to {output_path}. Check output directory permissions.")
     raise RuntimeError("audio extraction failed")
+
