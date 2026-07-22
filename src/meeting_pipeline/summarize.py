@@ -16,16 +16,16 @@ Provide an objective summary in {language}, using only the explicit content from
 
 Mandatory format:
 ## Pontos principais
-- ...
+- [Key discussion point 1]
 
 ## Decisões
-- ...
+- [Decision made or 'Nenhuma registrada.']
 
 ## Ações
-- ...
+- [Action item or 'Nenhuma registrada.']
 
 ## Pendências
-- ...
+- [Pending issue or 'Nenhuma registrada.']
 
 Do not invent missing facts.
 Transcript:
@@ -40,16 +40,16 @@ Focus on the main ideas, key explanations, and important moments presented in th
 
 Mandatory format:
 ## Resumo geral
-- ...
+- [A concise overview of what the video is about]
 
 ## Principais tópicos
-- ...
+- [Key topic 1]
 
 ## Momentos importantes
-- ...
+- [Key explanation or important moment 1]
 
 ## Conclusões ou mensagens finais
-- ...
+- [Final takeaway or conclusion]
 
 Do not invent missing facts.
 Transcript:
@@ -61,7 +61,7 @@ You will receive a list of items for the category '{category}' extracted from di
 Your task is to consolidate these items into a single, concise list in {language} without duplicates or redundancies.
 
 Keep only the explicit facts provided in the items list. Do not add new facts or assumptions.
-If the list is empty, respond only with: - Nenhuma registrada. (or - Nenhum ponto principal registrado. for category Pontos principais).
+If the list is empty, respond only with: - Nenhuma registrada.
 
 Mandatory format (return ONLY the list of topics):
 - Consolidated item 1
@@ -162,18 +162,26 @@ def parse_summary_sections(summary: str, is_video: bool = False) -> dict[str, li
             continue
 
         if current_section:
-            if line_strip.startswith(("-", "*", "1", "2", "3", "4", "5", "6", "7", "8", "9")):
-                item_match = re.match(r"^([-*]|\d+\.)\s*(.*)$", line_strip)
-                if item_match:
-                    content = item_match.group(2).strip()
-                    lower_content = content.lower()
-                    if content and not any(
-                        phrase in lower_content
-                        for phrase in ["nenhuma registrada", "nenhum ponto", "não há", "none registered"]
-                    ):
-                        sections[current_section].append(content)
+            # Capture lines regardless of whether they are bullet points (-/*) or plain text paragraphs
+            item_match = re.match(r"^([-*]|\d+\.)\s*(.*)$", line_strip)
+            content = item_match.group(2).strip() if item_match else line_strip
+            lower_content = content.lower()
+
+            if content and not any(
+                phrase in lower_content
+                for phrase in [
+                    "nenhuma registrada",
+                    "nenhum ponto",
+                    "nenhum resumo",
+                    "não há",
+                    "none registered",
+                    "no summary",
+                ]
+            ):
+                sections[current_section].append(content)
 
     return sections
+
 
 
 def _call_ollama_generate(
