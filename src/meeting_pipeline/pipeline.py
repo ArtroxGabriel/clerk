@@ -21,6 +21,7 @@ def run_pipeline(
     whisper_compute_type: str,
     llm_model: str,
     language: str | None,
+    is_video: bool = False,
 ) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -55,7 +56,9 @@ def run_pipeline(
         transcript=plain_text_transcript,
         model_name=llm_model,
         language=language or "pt",
+        is_video=is_video,
     )
+
     t_summarize = time.perf_counter() - t0
     logger.info("Summarization completed in %.2fs", t_summarize)
 

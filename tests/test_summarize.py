@@ -64,6 +64,25 @@ def test_summarize_success() -> None:
         assert "Some transcript content" in payload["prompt"]
 
 
+def test_summarize_video_prompt() -> None:
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"response": "## Resumo geral\n- Video summary point"}
+
+    mock_client = MagicMock()
+    mock_client.post.return_value = mock_response
+    mock_client.__enter__.return_value = mock_client
+
+    with patch("httpx.Client", return_value=mock_client):
+        result = summarize_transcript("Video transcript content", is_video=True)
+        assert result == "## Resumo geral\n- Video summary point"
+        mock_client.post.assert_called_once()
+        payload = mock_client.post.call_args[1]["json"]
+        assert "transcript of a video" in payload["prompt"]
+        assert "## Resumo geral" in payload["prompt"]
+
+
+
 def test_summarize_multi_chunk() -> None:
     # 6 words total, max_words_per_chunk=3 -> 2 chunks
     long_transcript = "one two three\nfour five six"

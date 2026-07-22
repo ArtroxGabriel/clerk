@@ -60,7 +60,9 @@ def test_cli_success_local_file(tmp_path: Path) -> None:
             whisper_compute_type="int8",
             llm_model="LiquidAI/lfm2.5-1.2b-instruct",
             language="pt",
+            is_video=False,
         )
+
 
 
 def test_cli_success_youtube_url(tmp_path: Path) -> None:

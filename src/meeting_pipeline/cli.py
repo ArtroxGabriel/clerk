@@ -36,6 +36,11 @@ def main(
     whisper_compute_type: str = typer.Option("int8", "--whisper-compute-type"),
     llm_model: str = typer.Option("LiquidAI/lfm2.5-1.2b-instruct", "--llm-model"),
     language: str = typer.Option("pt", "--language"),
+    video: bool = typer.Option(
+        False,
+        "--video",
+        help="Use video summary prompt template instead of meeting template.",
+    ),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
     configure_logging(verbose)
@@ -45,6 +50,7 @@ def main(
         or "youtube.com" in target
         or "youtu.be" in target
     )
+    is_video = is_url or video
 
     temp_file: Path | None = None
 
@@ -71,7 +77,9 @@ def main(
             whisper_compute_type=whisper_compute_type,
             llm_model=llm_model,
             language=language,
+            is_video=is_video,
         )
+
         typer.echo(f"Transcript: {transcript_path}")
         typer.echo(f"Meeting points: {summary_path}")
 

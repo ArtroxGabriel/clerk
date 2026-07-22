@@ -44,7 +44,9 @@ def test_run_pipeline(tmp_path: Path) -> None:
             transcript="Mock transcription",
             model_name="LiquidAI/lfm2.5-1.2b-instruct",
             language="pt",
+            is_video=False,
         )
+
 
 
         assert (output_dir / "transcript.srt").read_text(encoding="utf-8") == mock_srt + "\n"
