@@ -4,8 +4,28 @@ on:
   push:
     branches: [ "main", "master" ]
     tags: [ "v*.*.*" ]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - "Dockerfile"
+      - "docker-compose*.yaml"
+      - ".dockerignore"
+      - ".github/workflows/**"
   pull_request:
     branches: [ "main", "master" ]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - "Dockerfile"
+      - "docker-compose*.yaml"
+      - ".dockerignore"
+      - ".github/workflows/**"
   workflow_dispatch:
 
 env:

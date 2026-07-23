@@ -24,9 +24,9 @@ ENV UV_LINK_MODE=copy
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     if [ "$INSTALL_CUDA" = "true" ]; then \
-        uv sync --frozen --no-install-project --no-dev --extra cuda; \
+    uv sync --frozen --no-install-project --no-dev --extra cuda; \
     else \
-        uv sync --frozen --no-install-project --no-dev; \
+    uv sync --frozen --no-install-project --no-dev; \
     fi
 
 # Copy source and install the project itself
@@ -34,11 +34,11 @@ COPY src/ ./src/
 COPY README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     if [ "$INSTALL_CUDA" = "true" ]; then \
-        uv sync --frozen --no-dev --extra cuda && \
-        find /app/.venv -name "*.a" -delete && \
-        find /app/.venv -name "*.h" -delete; \
+    uv sync --frozen --no-dev --extra cuda && \
+    find /app/.venv -name "*.a" -delete && \
+    find /app/.venv -name "*.h" -delete; \
     else \
-        uv sync --frozen --no-dev; \
+    uv sync --frozen --no-dev; \
     fi && \
     find /app/.venv -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
@@ -52,6 +52,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+ARG UID=1000
+ARG GID=1000
+RUN groupadd -g "$GID" app && \
+    useradd -l -m -u "$UID" -g "$GID" app
+
 WORKDIR /app
 
 # Bring in only what's needed at runtime — no uv, no curl, no build cache
@@ -61,13 +66,13 @@ COPY --from=builder /app/src /app/src
 COPY --from=builder /app/README.md /app/README.md
 
 ENV PATH="/app/.venv/bin:$PATH"
-ENV LD_LIBRARY_PATH="/app/.venv/lib/python3.14/site-packages/nvidia/cublas/lib:/app/.venv/lib/python3.14/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH}"
+ENV LD_LIBRARY_PATH="/app/.venv/lib/python3.14/site-packages/nvidia/cublas/lib:/app/.venv/lib/python3.14/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH:-}"
 
 # Default directory for mount-based execution
 WORKDIR /workspace
 
-# Healthcheck to verify CLI executable and python runtime
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD ["meeting-pipeline", "--help"]
+USER app
+LABEL org.opencontainers.image.source="https://github.com/ArtroxGabriel/local-meeting-pipeline"
+LABEL org.opencontainers.image.description="Local meeting pipeline (faster-whisper + Ollama)"
 
 ENTRYPOINT ["meeting-pipeline"]

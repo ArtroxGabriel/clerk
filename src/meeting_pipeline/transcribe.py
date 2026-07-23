@@ -57,10 +57,14 @@ def transcribe_file(
     if verbose:
         logging.getLogger("faster_whisper").setLevel(logging.DEBUG)
 
+    effective_compute_type = compute_type
+    if compute_type == "int8" and (device.lower() in ("cuda", "gpu") or device.lower().startswith("cuda")):
+        effective_compute_type = "int8_float16"
+
     model = WhisperModel(
         model_name,
         device=device,
-        compute_type=compute_type,
+        compute_type=effective_compute_type,
     )
     batched_model = BatchedInferencePipeline(model=model)
 

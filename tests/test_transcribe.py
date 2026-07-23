@@ -124,3 +124,34 @@ def test_transcribe_empty_transcript(tmp_path: Path) -> None:
         with pytest.raises(RuntimeError, match="empty transcript"):
             transcribe_file(audio_path)
 
+
+def test_transcribe_gpu_int8_mapping(tmp_path: Path) -> None:
+    audio_path = tmp_path / "audio.wav"
+    audio_path.write_text("audio raw data")
+
+    mock_segment = MagicMock()
+    mock_segment.start = 0.0
+    mock_segment.end = 1.0
+    mock_segment.text = "GPU test."
+
+    mock_info = MagicMock()
+    mock_info.language = "pt"
+    mock_info.language_probability = 1.0
+    mock_info.duration = 1.0
+    mock_info.duration_after_vad = 1.0
+
+    mock_model_instance = MagicMock()
+    mock_batched_instance = MagicMock()
+    mock_batched_instance.transcribe.return_value = ([mock_segment], mock_info)
+
+    with patch("meeting_pipeline.transcribe.WhisperModel", return_value=mock_model_instance) as mock_whisper_class, \
+         patch("meeting_pipeline.transcribe.BatchedInferencePipeline", return_value=mock_batched_instance):
+        transcribe_file(
+            audio_path,
+            model_name="small",
+            device="cuda",
+            compute_type="int8",
+        )
+        mock_whisper_class.assert_called_once_with("small", device="cuda", compute_type="int8_float16")
+
+

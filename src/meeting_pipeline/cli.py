@@ -148,9 +148,9 @@ def main(
     ),
     gpu: bool = typer.Option(False, "--gpu", help="Shortcut for GPU configuration (--preset gpu)."),
     fast: bool = typer.Option(False, "--fast", help="Shortcut for fast CPU configuration (--preset fast)."),
-    whisper_model: str | None = typer.Option(None, "--whisper-model"),
-    whisper_device: str | None = typer.Option(None, "--whisper-device"),
-    whisper_compute_type: str | None = typer.Option(None, "--whisper-compute-type"),
+    whisper_model: str | None = typer.Option(None, "--whisper-model", help="Whisper model name ('tiny'., 'small', 'medium', 'large-v3')."),
+    whisper_device: str | None = typer.Option(None, "--whisper-device", help="Whisper model device (e.g., 'cpu', 'cuda')."),
+    whisper_compute_type: str | None = typer.Option(None, "--whisper-compute-type", help="Whisper model compute type (e.g., 'int8', 'int8_float16', 'float16', 'float32')."),
     whisper_batch_size: int | None = typer.Option(
         None,
         "--whisper-batch-size",
@@ -291,6 +291,6 @@ def main(
         if temp_file and temp_file.exists():
             try:
                 temp_file.unlink()
-                logger.info("Deleted temporary YouTube audio file: %s", temp_file)
+                logger.debug("Deleted temporary YouTube audio file: %s", temp_file)
             except Exception as e:
                 logger.warning("Failed to delete temporary file %s: %s", temp_file, e)
