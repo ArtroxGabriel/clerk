@@ -10,6 +10,13 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_LLM_MODEL = "LiquidAI/lfm2.5-1.2b-instruct"
+DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434"
+DEFAULT_TIMEOUT_SECONDS = 300.0
+UNLOAD_TIMEOUT_SECONDS = 10.0
+PULL_TIMEOUT_SECONDS = 600.0
+DEFAULT_MAX_WORDS_PER_CHUNK = 2000
+
 PROMPT_TEMPLATE = """
 You will receive the transcript of a meeting.
 Provide an objective summary in {language}, using only the explicit content from the transcript.
@@ -87,7 +94,10 @@ def get_language_name(lang_code: str | None) -> str:
     return LANGUAGE_NAMES.get(lang_code.lower(), lang_code)
 
 
-def split_transcript_by_words(transcript: str, max_words: int = 2000) -> list[str]:
+def split_transcript_by_words(
+    transcript: str,
+    max_words: int = DEFAULT_MAX_WORDS_PER_CHUNK,
+) -> list[str]:
     lines = transcript.splitlines()
     chunks: list[str] = []
     current_chunk: list[str] = []
@@ -161,7 +171,7 @@ def format_empty_fallback(section: str, primary_section: str) -> str:
 def unload_ollama_model(
     model_name: str,
     base_url: str,
-    timeout_seconds: float = 10.0,
+    timeout_seconds: float = UNLOAD_TIMEOUT_SECONDS,
 ) -> None:
     """Unload model from Ollama memory by posting keep_alive: 0."""
     payload = {
@@ -236,7 +246,7 @@ def _call_ollama_generate(
 
         if response.status_code != 200 and ("not found" in response.text.lower() or response.status_code == 404):
             logger.info("Model '%s' not found locally in Ollama. Attempting automatic model pull...", model_name)
-            pull_resp = client.post("/api/pull", json={"name": model_name, "stream": False}, timeout=600.0)
+            pull_resp = client.post("/api/pull", json={"name": model_name, "stream": False}, timeout=PULL_TIMEOUT_SECONDS)
             if pull_resp.status_code == 200:
                 logger.info("Model '%s' successfully pulled. Resuming generation...", model_name)
                 response = client.post("/api/generate", json=payload)
@@ -252,15 +262,15 @@ def _call_ollama_generate(
 
 def summarize_transcript(
     transcript: str,
-    model_name: str = "LiquidAI/lfm2.5-1.2b-instruct",
+    model_name: str = DEFAULT_LLM_MODEL,
     base_url: str | None = None,
-    timeout_seconds: float = 300.0,
-    max_words_per_chunk: int = 2000,
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    max_words_per_chunk: int = DEFAULT_MAX_WORDS_PER_CHUNK,
     language: str = "pt",
     is_video: bool = False,
 ) -> str:
     if base_url is None:
-        base_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+        base_url = os.environ.get("OLLAMA_BASE_URL", DEFAULT_OLLAMA_BASE_URL)
     if not transcript.strip():
         logger.error("Transcript is empty")
         raise ValueError("transcript is empty")

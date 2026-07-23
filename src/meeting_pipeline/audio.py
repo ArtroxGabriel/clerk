@@ -10,6 +10,11 @@ import uuid
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_SAMPLE_RATE = "16000"
+DEFAULT_CHANNELS = "1"
+DEFAULT_AUDIO_CODEC = "pcm_s16le"
+
+
 def ensure_binary(binary_name: str) -> None:
     if shutil.which(binary_name):
         return
@@ -89,11 +94,11 @@ def extract_audio(input_path: Path, output_path: Path) -> Path:
         str(input_path),
         "-vn",
         "-acodec",
-        "pcm_s16le",
+        DEFAULT_AUDIO_CODEC,
         "-ar",
-        "16000",
+        DEFAULT_SAMPLE_RATE,
         "-ac",
-        "1",
+        DEFAULT_CHANNELS,
         str(output_path),
     ]
 

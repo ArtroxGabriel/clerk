@@ -6,6 +6,7 @@ services:
       - huggingface-cache:/root/.cache/huggingface
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
+      - ENABLE_GPU=false
     depends_on:
       ollama-pull-model:
         condition: service_completed_successfully

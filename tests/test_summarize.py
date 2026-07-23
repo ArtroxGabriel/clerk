@@ -146,3 +146,33 @@ def test_summarize_empty_response_from_ollama() -> None:
         with pytest.raises(RuntimeError, match="empty summary"):
             summarize_transcript("Some transcript content")
 
+
+def test_split_transcript_giant_line() -> None:
+    giant_line = "word " * 10
+    chunks = split_transcript_by_words(giant_line.strip(), max_words=3)
+    assert len(chunks) == 4
+    assert chunks[0] == "word word word"
+
+
+def test_summarize_auto_model_pull() -> None:
+    # 404 response triggers pull endpoint, then succeeds on retry
+    not_found_resp = MagicMock()
+    not_found_resp.status_code = 404
+    not_found_resp.text = "model not found"
+
+    pull_resp = MagicMock()
+    pull_resp.status_code = 200
+
+    success_resp = MagicMock()
+    success_resp.status_code = 200
+    success_resp.json.return_value = {"response": "## Pontos principais\n- Pulled model summary"}
+
+    mock_client = MagicMock()
+    mock_client.post.side_effect = [not_found_resp, pull_resp, success_resp, MagicMock(status_code=200)]
+    mock_client.__enter__.return_value = mock_client
+
+    with patch("httpx.Client", return_value=mock_client):
+        res = summarize_transcript("transcript for pulled model")
+        assert res == "## Pontos principais\n- Pulled model summary"
+        assert mock_client.post.call_count == 4
+

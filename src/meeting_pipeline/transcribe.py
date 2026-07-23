@@ -3,16 +3,21 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from faster_whisper import WhisperModel
+from faster_whisper import BatchedInferencePipeline, WhisperModel
 
 logger = logging.getLogger(__name__)
 
+MS_PER_HOUR = 3_600_000
+MS_PER_MINUTE = 60_000
+MS_PER_SECOND = 1000
+DEFAULT_BATCH_SIZE = 2
+
 
 def format_timestamp(seconds: float) -> str:
-    total_ms = int(round(seconds * 1000))
-    hours, remainder = divmod(total_ms, 3_600_000)
-    minutes, remainder = divmod(remainder, 60_000)
-    secs, ms = divmod(remainder, 1000)
+    total_ms = round(seconds * MS_PER_SECOND)
+    hours, remainder = divmod(total_ms, MS_PER_HOUR)
+    minutes, remainder = divmod(remainder, MS_PER_MINUTE)
+    secs, ms = divmod(remainder, MS_PER_SECOND)
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
 
 
@@ -42,22 +47,30 @@ def transcribe_file(
     device: str = "cpu",
     compute_type: str = "int8",
     language: str | None = "pt",
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    verbose: bool = False,
 ) -> tuple[str, str, dict]:
     if not audio_path.exists():
         logger.error("Audio file does not exist: %s", audio_path)
         raise FileNotFoundError(audio_path)
+
+    if verbose:
+        logging.getLogger("faster_whisper").setLevel(logging.DEBUG)
 
     model = WhisperModel(
         model_name,
         device=device,
         compute_type=compute_type,
     )
+    batched_model = BatchedInferencePipeline(model=model)
 
-    segments, info = model.transcribe(
+    segments, info = batched_model.transcribe(
         str(audio_path),
         language=language,
         vad_filter=True,
         word_timestamps=False,
+        batch_size=batch_size,
+        log_progress=verbose,
     )
 
     # Convert generator to list to iterate for both SRT and plain text

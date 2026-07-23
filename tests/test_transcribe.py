@@ -71,9 +71,11 @@ def test_transcribe_success(tmp_path: Path) -> None:
     mock_info.duration_after_vad = 8.5
 
     mock_model_instance = MagicMock()
-    mock_model_instance.transcribe.return_value = (mock_segments, mock_info)
+    mock_batched_instance = MagicMock()
+    mock_batched_instance.transcribe.return_value = (mock_segments, mock_info)
 
-    with patch("meeting_pipeline.transcribe.WhisperModel", return_value=mock_model_instance) as mock_whisper_class:
+    with patch("meeting_pipeline.transcribe.WhisperModel", return_value=mock_model_instance) as mock_whisper_class, \
+         patch("meeting_pipeline.transcribe.BatchedInferencePipeline", return_value=mock_batched_instance) as mock_batched_class:
         plain_text, srt_text, metadata = transcribe_file(
             audio_path,
             model_name="tiny",
@@ -83,11 +85,14 @@ def test_transcribe_success(tmp_path: Path) -> None:
         )
 
         mock_whisper_class.assert_called_once_with("tiny", device="cpu", compute_type="int8")
-        mock_model_instance.transcribe.assert_called_once_with(
+        mock_batched_class.assert_called_once_with(model=mock_model_instance)
+        mock_batched_instance.transcribe.assert_called_once_with(
             str(audio_path),
             language="en",
             vad_filter=True,
             word_timestamps=False,
+            batch_size=2,
+            log_progress=False,
         )
 
         assert plain_text == "Hello world.\nThis is a test."
@@ -111,9 +116,11 @@ def test_transcribe_empty_transcript(tmp_path: Path) -> None:
     mock_info.duration_after_vad = 0.0
 
     mock_model_instance = MagicMock()
-    mock_model_instance.transcribe.return_value = (mock_segments, mock_info)
+    mock_batched_instance = MagicMock()
+    mock_batched_instance.transcribe.return_value = (mock_segments, mock_info)
 
-    with patch("meeting_pipeline.transcribe.WhisperModel", return_value=mock_model_instance):
+    with patch("meeting_pipeline.transcribe.WhisperModel", return_value=mock_model_instance), \
+         patch("meeting_pipeline.transcribe.BatchedInferencePipeline", return_value=mock_batched_instance):
         with pytest.raises(RuntimeError, match="empty transcript"):
             transcribe_file(audio_path)
 

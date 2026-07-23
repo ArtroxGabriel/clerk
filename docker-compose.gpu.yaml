@@ -6,6 +6,8 @@ services:
       context: .
       args:
         INSTALL_CUDA: "true"
+    environment:
+      - ENABLE_GPU=true
     deploy:
       resources:
         reservations:

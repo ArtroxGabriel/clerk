@@ -19,7 +19,7 @@ def test_run_pipeline(tmp_path: Path) -> None:
          patch("meeting_pipeline.pipeline.transcribe_file", return_value=("Mock transcription", mock_srt, mock_metadata)) as mock_transcribe, \
          patch("meeting_pipeline.pipeline.summarize_transcript", return_value="Mock summary") as mock_summarize:
 
-        tx_path, sum_path = run_pipeline(
+        tx_path, sum_path, metadata_res = run_pipeline(
             input_path=input_path,
             output_dir=output_dir,
             whisper_model="tiny",
@@ -31,6 +31,7 @@ def test_run_pipeline(tmp_path: Path) -> None:
 
         assert tx_path == output_dir / "transcript.srt"
         assert sum_path == output_dir / "meeting_points.md"
+        assert metadata_res["language"] == "pt"
 
         mock_extract.assert_called_once_with(input_path, output_dir / "normalized.wav")
         mock_transcribe.assert_called_once_with(
@@ -39,6 +40,8 @@ def test_run_pipeline(tmp_path: Path) -> None:
             device="cpu",
             compute_type="int8",
             language="pt",
+            batch_size=2,
+            verbose=False,
         )
         mock_summarize.assert_called_once_with(
             transcript="Mock transcription",

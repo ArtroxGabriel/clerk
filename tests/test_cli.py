@@ -32,7 +32,17 @@ def test_cli_success_local_file(tmp_path: Path) -> None:
     input_file.write_text("mock audio content")
     output_dir = tmp_path / "output_dir"
 
-    with patch("meeting_pipeline.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"))) as mock_run:
+    mock_res_meta = {
+        "language": "pt",
+        "language_probability": 0.99,
+        "duration": 120.0,
+        "duration_after_vad": 115.0,
+        "timings": {"total_seconds": 10.5, "audio_extraction_seconds": 1.0, "transcription_seconds": 5.0, "summarization_seconds": 4.5},
+        "models": {"whisper_model": "tiny", "whisper_device": "cpu", "whisper_compute_type": "int8", "whisper_batch_size": 2, "llm_model": "LiquidAI/lfm2.5-1.2b-instruct"},
+        "word_counts": {"transcript_words": 150, "summary_words": 50},
+    }
+
+    with patch("meeting_pipeline.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)) as mock_run:
         result = runner.invoke(
             app,
             [
@@ -50,8 +60,9 @@ def test_cli_success_local_file(tmp_path: Path) -> None:
             ]
         )
         assert result.exit_code == 0
-        assert "Transcript: out/transcript.srt" in result.stdout
-        assert "Meeting points: out/meeting_points.md" in result.stdout
+        assert "Pipeline Status" in result.stdout
+        assert "Transcript (SRT) : out/transcript.srt" in result.stdout
+        assert "Meeting Points   : out/meeting_points.md" in result.stdout
         mock_run.assert_called_once_with(
             input_path=input_file,
             output_dir=output_dir,
@@ -60,18 +71,20 @@ def test_cli_success_local_file(tmp_path: Path) -> None:
             whisper_compute_type="int8",
             llm_model="LiquidAI/lfm2.5-1.2b-instruct",
             language="pt",
+            whisper_batch_size=2,
             is_video=False,
+            verbose=True,
         )
-
 
 
 def test_cli_success_youtube_url(tmp_path: Path) -> None:
     mock_temp_file = tmp_path / "yt_download.wav"
     mock_temp_file.write_text("yt audio")
     yt_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    mock_res_meta = {"timings": {}, "models": {}, "word_counts": {}}
 
     with patch("meeting_pipeline.cli.download_youtube_audio", return_value=mock_temp_file) as mock_dl, \
-         patch("meeting_pipeline.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"))):
+         patch("meeting_pipeline.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)):
         result = runner.invoke(app, ["--target", yt_url])
         assert result.exit_code == 0
         mock_dl.assert_called_once_with(yt_url)
@@ -92,8 +105,10 @@ def test_cli_keyboard_interrupt(tmp_path: Path) -> None:
 def test_cli_gpu_flag(tmp_path: Path) -> None:
     input_file = tmp_path / "sample.mp3"
     input_file.write_text("mock audio content")
+    mock_res_meta = {"timings": {}, "models": {}, "word_counts": {}}
 
-    with patch("meeting_pipeline.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"))) as mock_run:
+    with patch("meeting_pipeline.cli.is_gpu_available", return_value=True), \
+         patch("meeting_pipeline.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)) as mock_run:
         result = runner.invoke(app, ["--target", str(input_file), "--gpu"])
         assert result.exit_code == 0
         mock_run.assert_called_once_with(
@@ -104,16 +119,20 @@ def test_cli_gpu_flag(tmp_path: Path) -> None:
             whisper_compute_type="float16",
             llm_model="llama3.1:8b",
             language="pt",
+            whisper_batch_size=8,
             is_video=False,
+            verbose=False,
         )
 
 
 def test_cli_preset_override(tmp_path: Path) -> None:
     input_file = tmp_path / "sample.mp3"
     input_file.write_text("mock audio content")
+    mock_res_meta = {"timings": {}, "models": {}, "word_counts": {}}
 
-    with patch("meeting_pipeline.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"))) as mock_run:
-        result = runner.invoke(app, ["--target", str(input_file), "--preset", "gpu", "--whisper-model", "large-v3"])
+    with patch("meeting_pipeline.cli.is_gpu_available", return_value=True), \
+         patch("meeting_pipeline.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)) as mock_run:
+        result = runner.invoke(app, ["--target", str(input_file), "--preset", "gpu", "--whisper-model", "large-v3", "--whisper-batch-size", "4"])
         assert result.exit_code == 0
         mock_run.assert_called_once_with(
             input_path=input_file,
@@ -123,7 +142,9 @@ def test_cli_preset_override(tmp_path: Path) -> None:
             whisper_compute_type="float16",
             llm_model="llama3.1:8b",
             language="pt",
+            whisper_batch_size=4,
             is_video=False,
+            verbose=False,
         )
 
 
@@ -134,5 +155,26 @@ def test_cli_invalid_preset(tmp_path: Path) -> None:
     result = runner.invoke(app, ["--target", str(input_file), "--preset", "invalid_name"])
     assert result.exit_code == 1
     assert "Unknown preset 'invalid_name'" in result.output
+
+
+def test_cli_gpu_disabled_in_cpu_mode(tmp_path: Path) -> None:
+    input_file = tmp_path / "sample.mp3"
+    input_file.write_text("mock audio content")
+
+    with patch("meeting_pipeline.cli.is_gpu_available", return_value=False):
+        # 1. Test --gpu flag when GPU is disabled
+        result_gpu = runner.invoke(app, ["--target", str(input_file), "--gpu"])
+        assert result_gpu.exit_code == 1
+        assert "GPU execution is disabled or unavailable in CPU mode" in result_gpu.output
+
+        # 2. Test --preset gpu when GPU is disabled
+        result_preset = runner.invoke(app, ["--target", str(input_file), "--preset", "gpu"])
+        assert result_preset.exit_code == 1
+        assert "requires GPU execution, which is disabled or unavailable in CPU mode" in result_preset.output
+
+        # 3. Test --whisper-device cuda when GPU is disabled
+        result_device = runner.invoke(app, ["--target", str(input_file), "--whisper-device", "cuda"])
+        assert result_device.exit_code == 1
+        assert "--whisper-device cuda' was specified, but GPU execution is disabled or unavailable in CPU mode" in result_device.output
 
 

@@ -21,8 +21,10 @@ def run_pipeline(
     whisper_compute_type: str,
     llm_model: str,
     language: str | None,
+    whisper_batch_size: int = 2,
     is_video: bool = False,
-) -> tuple[Path, Path]:
+    verbose: bool = False,
+) -> tuple[Path, Path, dict]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     audio_path = output_dir / "normalized.wav"
@@ -46,6 +48,8 @@ def run_pipeline(
         device=whisper_device,
         compute_type=whisper_compute_type,
         language=language,
+        batch_size=whisper_batch_size,
+        verbose=verbose,
     )
     t_transcribe = time.perf_counter() - t0
     logger.info("Transcription completed in %.2fs", t_transcribe)
@@ -72,6 +76,19 @@ def run_pipeline(
         "total_seconds": round(t_total, 3),
     }
 
+    metadata["models"] = {
+        "whisper_model": whisper_model,
+        "whisper_device": whisper_device,
+        "whisper_compute_type": whisper_compute_type,
+        "whisper_batch_size": whisper_batch_size,
+        "llm_model": llm_model,
+    }
+
+    metadata["word_counts"] = {
+        "transcript_words": len(plain_text_transcript.split()),
+        "summary_words": len(summary.split()),
+    }
+
     transcript_path.write_text(srt_transcript + "\n", encoding="utf-8")
     summary_path.write_text(summary + "\n", encoding="utf-8")
     metadata_path.write_text(
@@ -82,6 +99,6 @@ def run_pipeline(
     logger.info("Transcript written to %s", transcript_path)
     logger.info("Summary written to %s", summary_path)
 
-    return transcript_path, summary_path
+    return transcript_path, summary_path, metadata
 
 
