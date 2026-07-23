@@ -83,6 +83,14 @@ def configure_logging(verbose: bool) -> None:
         logging.getLogger("faster_whisper").setLevel(logging.DEBUG)
 
 
+def format_time_hhmmssmm(seconds: float) -> str:
+    total_cs = round(seconds * 100)
+    hours, remainder = divmod(total_cs, 360000)
+    minutes, remainder = divmod(remainder, 6000)
+    secs, cs = divmod(remainder, 100)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}:{cs:02d}"
+
+
 def print_pipeline_status(
     transcript_path: Path,
     summary_path: Path,
@@ -112,19 +120,21 @@ def print_pipeline_status(
     typer.echo(f"  • LLM              : {models.get('llm_model')}")
 
     typer.echo("\n⏱️ Execution Time:")
-    typer.echo(f"  • Total Time       : {timings.get('total_seconds', 0.0):.2f}s")
+    typer.echo(f"  • Total Time       : {format_time_hhmmssmm(float(timings.get('total_seconds', 0.0)))}")
     if verbose:
-        typer.echo(f"    - Audio Extract  : {timings.get('audio_extraction_seconds', 0.0):.2f}s")
-        typer.echo(f"    - Transcription  : {timings.get('transcription_seconds', 0.0):.2f}s")
-        typer.echo(f"    - Summarization  : {timings.get('summarization_seconds', 0.0):.2f}s")
+        typer.echo(f"    - Audio Extract  : {format_time_hhmmssmm(float(timings.get('audio_extraction_seconds', 0.0)))}")
+        typer.echo(f"    - Transcription  : {format_time_hhmmssmm(float(timings.get('transcription_seconds', 0.0)))}")
+        typer.echo(f"    - Summarization  : {format_time_hhmmssmm(float(timings.get('summarization_seconds', 0.0)))}")
 
     typer.echo("\n📊 Audio & Content Metrics:")
     lang_prob = metadata.get("language_probability")
     prob_str = f" ({lang_prob:.0%})" if lang_prob is not None else ""
     typer.echo(f"  • Language         : {metadata.get('language')}{prob_str}")
+    duration = float(metadata.get("duration", 0.0))
+    speech_duration = float(metadata.get("duration_after_vad", 0.0))
     typer.echo(
-        f"  • Audio Duration   : {metadata.get('duration', 0.0):.1f}s "
-        f"(Speech: {metadata.get('duration_after_vad', 0.0):.1f}s)"
+        f"  • Audio Duration   : {format_time_hhmmssmm(duration)} "
+        f"(Speech: {format_time_hhmmssmm(speech_duration)})"
     )
     typer.echo(
         f"  • Word Counts      : Transcript ({word_counts.get('transcript_words', 0)} words) -> Summary ({word_counts.get('summary_words', 0)} words)"

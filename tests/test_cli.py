@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 from typer.testing import CliRunner
 
-from clerk.cli import app
+from clerk.cli import app, format_time_hhmmssmm
 
 
 import re
@@ -14,6 +14,13 @@ runner = CliRunner()
 
 def _clean_output(text: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", text)
+
+
+def test_format_time_hhmmssmm() -> None:
+    assert format_time_hhmmssmm(0.0) == "00:00:00:00"
+    assert format_time_hhmmssmm(10.5) == "00:00:10:50"
+    assert format_time_hhmmssmm(120.0) == "00:02:00:00"
+    assert format_time_hhmmssmm(3661.12) == "01:01:01:12"
 
 
 def test_cli_help() -> None:
