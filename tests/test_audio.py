@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from unittest.mock import patch, MagicMock
 
-from meeting_pipeline.audio import (
+from clerk.audio import (
     download_youtube_audio,
     ensure_ffmpeg,
     ensure_yt_dlp,

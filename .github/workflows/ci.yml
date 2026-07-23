@@ -67,7 +67,7 @@ jobs:
       - name: Unit Tests (Pytest)
         env:
           NO_COLOR: "1"
-        run: uv run meeting-pipeline-test
+        run: uv run clerk-test
 
   build-and-push:
     name: Build & Push (${{ matrix.image-type }})

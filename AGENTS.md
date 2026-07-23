@@ -72,7 +72,7 @@ start/end HTML-comment markers, without disturbing the rest of the file.
 
 ### 🛠️ Verification & Developer Commands
 Always use the registered `uv` environment runners:
-* **Run Tests**: `uv run meeting-pipeline-test` (Do NOT guess standard `pytest` unless running locally, use this custom script to ensure the environment is synced).
+* **Run Tests**: `uv run clerk-test` (Do NOT guess standard `pytest` unless running locally, use this custom script to ensure the environment is synced).
 * **Type Checking**: `uv run pyrefly check` (We use **Pyrefly** as the static type checker and LSP).
 * **Linting / Formatting**: `uv run ruff check`
 

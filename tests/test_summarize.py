@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import patch, MagicMock
 
-from meeting_pipeline.summarize import (
+from clerk.summarize import (
     parse_summary_sections,
     split_transcript_by_words,
     summarize_transcript,

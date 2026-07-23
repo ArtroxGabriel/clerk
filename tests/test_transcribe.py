@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from unittest.mock import patch, MagicMock
 
-from meeting_pipeline.transcribe import (
+from clerk.transcribe import (
     format_timestamp,
     segments_to_srt,
     transcribe_file,
@@ -74,8 +74,8 @@ def test_transcribe_success(tmp_path: Path) -> None:
     mock_batched_instance = MagicMock()
     mock_batched_instance.transcribe.return_value = (mock_segments, mock_info)
 
-    with patch("meeting_pipeline.transcribe.WhisperModel", return_value=mock_model_instance) as mock_whisper_class, \
-         patch("meeting_pipeline.transcribe.BatchedInferencePipeline", return_value=mock_batched_instance) as mock_batched_class:
+    with patch("clerk.transcribe.WhisperModel", return_value=mock_model_instance) as mock_whisper_class, \
+         patch("clerk.transcribe.BatchedInferencePipeline", return_value=mock_batched_instance) as mock_batched_class:
         plain_text, srt_text, metadata = transcribe_file(
             audio_path,
             model_name="tiny",
@@ -119,8 +119,8 @@ def test_transcribe_empty_transcript(tmp_path: Path) -> None:
     mock_batched_instance = MagicMock()
     mock_batched_instance.transcribe.return_value = (mock_segments, mock_info)
 
-    with patch("meeting_pipeline.transcribe.WhisperModel", return_value=mock_model_instance), \
-         patch("meeting_pipeline.transcribe.BatchedInferencePipeline", return_value=mock_batched_instance):
+    with patch("clerk.transcribe.WhisperModel", return_value=mock_model_instance), \
+         patch("clerk.transcribe.BatchedInferencePipeline", return_value=mock_batched_instance):
         with pytest.raises(RuntimeError, match="empty transcript"):
             transcribe_file(audio_path)
 
@@ -144,8 +144,8 @@ def test_transcribe_gpu_int8_mapping(tmp_path: Path) -> None:
     mock_batched_instance = MagicMock()
     mock_batched_instance.transcribe.return_value = ([mock_segment], mock_info)
 
-    with patch("meeting_pipeline.transcribe.WhisperModel", return_value=mock_model_instance) as mock_whisper_class, \
-         patch("meeting_pipeline.transcribe.BatchedInferencePipeline", return_value=mock_batched_instance):
+    with patch("clerk.transcribe.WhisperModel", return_value=mock_model_instance) as mock_whisper_class, \
+         patch("clerk.transcribe.BatchedInferencePipeline", return_value=mock_batched_instance):
         transcribe_file(
             audio_path,
             model_name="small",

@@ -2,7 +2,7 @@
 # Run with: docker compose -f docker-compose.yaml -f docker-compose.gpu.yaml up --exit-code-from app --abort-on-container-exit
 services:
   app:
-    image: ghcr.io/artroxgabriel/local-meeting-pipeline:gpu
+    image: ghcr.io/artroxgabriel/clerk:gpu
     build:
       context: .
       args:

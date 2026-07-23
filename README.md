@@ -1,4 +1,4 @@
-# Local Meeting Pipeline
+# Clerk - Local Meeting & Audio Pipeline
 
 A high-performance, privacy-focused Python pipeline that processes audio or video files (and YouTube URLs), transcribes them using `faster-whisper`, and generates structured meeting summary bullet points using local LLMs via Ollama.
 
@@ -81,7 +81,7 @@ docker compose run --rm app --target sample.mp3
 uv sync
 
 # Run pipeline
-uv run meeting-pipeline --target <path_or_youtube_url> [OPTIONS]
+uv run clerk --target <path_or_youtube_url> [OPTIONS]
 ```
 
 ### Configuration Profiles & Presets
@@ -131,7 +131,7 @@ All outputs are suffixed with the input file/video name and saved to `--output-d
 
 ```bash
 # Run unit tests
-uv run meeting-pipeline-test
+uv run clerk-test
 
 # Type checking (Pyrefly)
 uv run pyrefly check

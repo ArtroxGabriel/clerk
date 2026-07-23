@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 from typer.testing import CliRunner
 
-from meeting_pipeline.cli import app
+from clerk.cli import app
 
 
 import re
@@ -49,7 +49,7 @@ def test_cli_success_local_file(tmp_path: Path) -> None:
         "word_counts": {"transcript_words": 150, "summary_words": 50},
     }
 
-    with patch("meeting_pipeline.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)) as mock_run:
+    with patch("clerk.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)) as mock_run:
         result = runner.invoke(
             app,
             [
@@ -91,8 +91,8 @@ def test_cli_success_youtube_url(tmp_path: Path) -> None:
     yt_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
     mock_res_meta = {"timings": {}, "models": {}, "word_counts": {}}
 
-    with patch("meeting_pipeline.cli.download_youtube_audio", return_value=mock_temp_file) as mock_dl, \
-         patch("meeting_pipeline.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)):
+    with patch("clerk.cli.download_youtube_audio", return_value=mock_temp_file) as mock_dl, \
+         patch("clerk.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)):
         result = runner.invoke(app, ["--target", yt_url])
         assert result.exit_code == 0
         mock_dl.assert_called_once_with(yt_url)
@@ -104,7 +104,7 @@ def test_cli_keyboard_interrupt(tmp_path: Path) -> None:
     input_file = tmp_path / "sample.mp3"
     input_file.write_text("mock audio content")
 
-    with patch("meeting_pipeline.cli.run_pipeline", side_effect=KeyboardInterrupt()):
+    with patch("clerk.cli.run_pipeline", side_effect=KeyboardInterrupt()):
         result = runner.invoke(app, ["--target", str(input_file)])
         assert result.exit_code == 130
         assert "Process interrupted by user" in result.output
@@ -115,8 +115,8 @@ def test_cli_gpu_flag(tmp_path: Path) -> None:
     input_file.write_text("mock audio content")
     mock_res_meta = {"timings": {}, "models": {}, "word_counts": {}}
 
-    with patch("meeting_pipeline.cli.is_gpu_available", return_value=True), \
-         patch("meeting_pipeline.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)) as mock_run:
+    with patch("clerk.cli.is_gpu_available", return_value=True), \
+         patch("clerk.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)) as mock_run:
         result = runner.invoke(app, ["--target", str(input_file), "--gpu"])
         assert result.exit_code == 0
         mock_run.assert_called_once_with(
@@ -138,8 +138,8 @@ def test_cli_preset_override(tmp_path: Path) -> None:
     input_file.write_text("mock audio content")
     mock_res_meta = {"timings": {}, "models": {}, "word_counts": {}}
 
-    with patch("meeting_pipeline.cli.is_gpu_available", return_value=True), \
-         patch("meeting_pipeline.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)) as mock_run:
+    with patch("clerk.cli.is_gpu_available", return_value=True), \
+         patch("clerk.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)) as mock_run:
         result = runner.invoke(app, ["--target", str(input_file), "--preset", "gpu", "--whisper-model", "large-v3", "--whisper-batch-size", "4"])
         assert result.exit_code == 0
         mock_run.assert_called_once_with(
@@ -169,7 +169,7 @@ def test_cli_gpu_disabled_in_cpu_mode(tmp_path: Path) -> None:
     input_file = tmp_path / "sample.mp3"
     input_file.write_text("mock audio content")
 
-    with patch("meeting_pipeline.cli.is_gpu_available", return_value=False):
+    with patch("clerk.cli.is_gpu_available", return_value=False):
         # 1. Test --gpu flag when GPU is disabled
         result_gpu = runner.invoke(app, ["--target", str(input_file), "--gpu"])
         assert result_gpu.exit_code == 1
@@ -191,7 +191,7 @@ def test_cli_meeting_flag(tmp_path: Path) -> None:
     input_file.write_text("mock audio content")
     mock_res_meta = {"timings": {}, "models": {}, "word_counts": {}}
 
-    with patch("meeting_pipeline.cli.run_pipeline", return_value=(Path("out/sample_transcript.srt"), Path("out/sample_meeting_points.md"), mock_res_meta)) as mock_run:
+    with patch("clerk.cli.run_pipeline", return_value=(Path("out/sample_transcript.srt"), Path("out/sample_meeting_points.md"), mock_res_meta)) as mock_run:
         result = runner.invoke(app, ["--target", str(input_file), "--meeting"])
         assert result.exit_code == 0
         mock_run.assert_called_once()

@@ -72,7 +72,7 @@ ENV LD_LIBRARY_PATH="/app/.venv/lib/python3.14/site-packages/nvidia/cublas/lib:/
 WORKDIR /workspace
 
 USER app
-LABEL org.opencontainers.image.source="https://github.com/ArtroxGabriel/local-meeting-pipeline"
-LABEL org.opencontainers.image.description="Local meeting pipeline (faster-whisper + Ollama)"
+LABEL org.opencontainers.image.source="https://github.com/ArtroxGabriel/clerk"
+LABEL org.opencontainers.image.description="Clerk - Local meeting & audio transcription pipeline (faster-whisper + Ollama)"
 
-ENTRYPOINT ["meeting-pipeline"]
+ENTRYPOINT ["clerk"]
