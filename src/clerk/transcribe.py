@@ -55,6 +55,10 @@ def transcribe_file(
         logger.error("Audio file does not exist: %s", audio_path)
         raise FileNotFoundError(audio_path)
 
+    if batch_size < 1:
+        logger.error("batch_size must be >= 1 (got %s)", batch_size)
+        raise ValueError(f"batch_size must be >= 1, got {batch_size}")
+
     if verbose:
         logging.getLogger("faster_whisper").setLevel(logging.DEBUG)
 

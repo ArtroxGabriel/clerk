@@ -214,3 +214,50 @@ def test_cli_video_and_meeting_mutually_exclusive(tmp_path: Path) -> None:
     assert "Cannot specify both --video and --meeting options simultaneously" in result.output
 
 
+def test_cli_gpu_and_fast_mutually_exclusive(tmp_path: Path) -> None:
+    input_file = tmp_path / "sample.mp3"
+    input_file.write_text("mock audio content")
+
+    result = runner.invoke(app, ["--target", str(input_file), "--gpu", "--fast"])
+    assert result.exit_code == 1
+    assert "Cannot specify both --gpu and --fast options simultaneously" in result.output
+
+
+def test_cli_invalid_batch_size(tmp_path: Path) -> None:
+    input_file = tmp_path / "sample.mp3"
+    input_file.write_text("mock audio content")
+
+    result = runner.invoke(app, ["--target", str(input_file), "--whisper-batch-size", "0"])
+    assert result.exit_code == 1
+    assert "--whisper-batch-size must be a positive integer" in result.output
+
+
+def test_cli_invalid_compute_type(tmp_path: Path) -> None:
+    input_file = tmp_path / "sample.mp3"
+    input_file.write_text("mock audio content")
+
+    result = runner.invoke(app, ["--target", str(input_file), "--whisper-compute-type", "invalid_type"])
+    assert result.exit_code == 1
+    assert "Invalid --whisper-compute-type 'invalid_type'" in result.output
+
+
+def test_cli_invalid_device(tmp_path: Path) -> None:
+    input_file = tmp_path / "sample.mp3"
+    input_file.write_text("mock audio content")
+
+    result = runner.invoke(app, ["--target", str(input_file), "--whisper-device", "invalid_dev"])
+    assert result.exit_code == 1
+    assert "Invalid --whisper-device 'invalid_dev'" in result.output
+
+
+def test_cli_upfront_option_validation_before_download() -> None:
+    # Option error must be caught BEFORE attempting YouTube download
+    yt_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    with patch("clerk.cli.download_youtube_audio") as mock_dl:
+        result = runner.invoke(app, ["--target", yt_url, "--whisper-batch-size", "0"])
+        assert result.exit_code == 1
+        assert "--whisper-batch-size must be a positive integer" in result.output
+        mock_dl.assert_not_called()
+
+
+

@@ -57,6 +57,8 @@ EXIT_ERROR = 1
 EXIT_INTERRUPTED = 130
 
 GPU_PRESETS = {"gpu", "cuda", "accurate"}
+VALID_COMPUTE_TYPES = {"int8", "int8_float16", "int8_bfloat16", "int8_float32", "float16", "bfloat16", "float32", "default"}
+VALID_DEVICES = {"cpu", "cuda", "gpu", "auto"}
 
 
 def is_gpu_available() -> bool:
@@ -182,8 +184,17 @@ def main(
 ) -> None:
     configure_logging(verbose)
 
+    if not target or not target.strip():
+        typer.echo("Error: --target cannot be empty.", err=True)
+        raise typer.Exit(code=EXIT_ERROR)
+    target = target.strip()
+
     if video and meeting:
         typer.echo("Error: Cannot specify both --video and --meeting options simultaneously.", err=True)
+        raise typer.Exit(code=EXIT_ERROR)
+
+    if gpu and fast:
+        typer.echo("Error: Cannot specify both --gpu and --fast options simultaneously.", err=True)
         raise typer.Exit(code=EXIT_ERROR)
 
     gpu_supported = is_gpu_available()
@@ -226,15 +237,46 @@ def main(
     defaults = PRESETS[selected_preset]
 
     # Explicit flags override preset defaults
-    effective_whisper_model = whisper_model or str(defaults["whisper_model"])
-    effective_whisper_device = whisper_device or str(defaults["whisper_device"])
-    effective_whisper_compute_type = whisper_compute_type or str(defaults["whisper_compute_type"])
-    effective_whisper_batch_size = whisper_batch_size or int(defaults.get("whisper_batch_size", 2))
-    effective_llm_model = llm_model or str(defaults["llm_model"])
+    effective_whisper_model = (whisper_model or str(defaults["whisper_model"])).strip()
+    effective_whisper_device = (whisper_device or str(defaults["whisper_device"])).strip()
+    effective_whisper_compute_type = (whisper_compute_type or str(defaults["whisper_compute_type"])).strip()
+    effective_whisper_batch_size = whisper_batch_size if whisper_batch_size is not None else int(defaults.get("whisper_batch_size", 2))
+    effective_llm_model = (llm_model or str(defaults["llm_model"])).strip()
 
-    if effective_whisper_device == "cuda" and not gpu_supported:
+    if not effective_whisper_model:
+        typer.echo("Error: --whisper-model cannot be empty.", err=True)
+        raise typer.Exit(code=EXIT_ERROR)
+
+    if not effective_llm_model:
+        typer.echo("Error: --llm-model cannot be empty.", err=True)
+        raise typer.Exit(code=EXIT_ERROR)
+
+    if effective_whisper_batch_size < 1:
+        typer.echo(
+            f"Error: --whisper-batch-size must be a positive integer (got {effective_whisper_batch_size}).",
+            err=True,
+        )
+        raise typer.Exit(code=EXIT_ERROR)
+
+    if effective_whisper_device.lower() not in VALID_DEVICES:
+        allowed_devs = ", ".join(sorted(list(VALID_DEVICES)))
+        typer.echo(
+            f"Error: Invalid --whisper-device '{effective_whisper_device}'. Allowed values: {allowed_devs}",
+            err=True,
+        )
+        raise typer.Exit(code=EXIT_ERROR)
+
+    if (effective_whisper_device.lower() in ("cuda", "gpu")) and not gpu_supported:
         typer.echo(
             "Error: '--whisper-device cuda' was specified, but GPU execution is disabled or unavailable in CPU mode.",
+            err=True,
+        )
+        raise typer.Exit(code=EXIT_ERROR)
+
+    if effective_whisper_compute_type.lower() not in VALID_COMPUTE_TYPES:
+        allowed_types = ", ".join(sorted(list(VALID_COMPUTE_TYPES)))
+        typer.echo(
+            f"Error: Invalid --whisper-compute-type '{effective_whisper_compute_type}'. Allowed values: {allowed_types}",
             err=True,
         )
         raise typer.Exit(code=EXIT_ERROR)
@@ -244,6 +286,18 @@ def main(
         or "youtube.com" in target
         or "youtu.be" in target
     )
+
+    if not is_url:
+        local_path = Path(target)
+        if not local_path.exists():
+            logger.error("Input file does not exist: %s", local_path)
+            typer.echo(f"Error: Input file does not exist: {local_path}", err=True)
+            raise typer.Exit(code=EXIT_ERROR)
+        if not local_path.is_file():
+            logger.error("Input path is not a file: %s", local_path)
+            typer.echo(f"Error: Input path is not a file: {local_path}", err=True)
+            raise typer.Exit(code=EXIT_ERROR)
+
     if video:
         is_video = True
     elif meeting:
@@ -260,13 +314,8 @@ def main(
             t_dl = time.perf_counter() - t0
             logger.info("YouTube audio download completed in %.2fs", t_dl)
             input_path = temp_file
-
         else:
             input_path = Path(target)
-            if not input_path.exists():
-                logger.error("Input file does not exist: %s", input_path)
-                typer.echo(f"Error: Input file does not exist: {input_path}", err=True)
-                raise typer.Exit(code=EXIT_ERROR)
 
         transcript_path, summary_path, metadata = run_pipeline(
             input_path=input_path,
