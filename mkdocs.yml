@@ -1,0 +1,59 @@
+site_name: clerk Documentation
+site_description: Automated Audio Extraction, Speech-to-Text Transcription & Portuguese Summarization CLI
+site_url: https://artroxgabriel.github.io/clerk/
+repo_url: https://github.com/ArtroxGabriel/clerk
+repo_name: ArtroxGabriel/clerk
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.expand
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - content.code.annotate
+
+plugins:
+  - search
+  - mermaid2
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+
+nav:
+  - Home: index.md
+  - Modules Overview: modules/index.md
+  - Core Modules:
+      - Prompts & Security: modules/prompts.md
+      - Speech-to-Text: modules/transcribe.md
+      - Summarization & Ollama: modules/summarize.md
+      - Audio Normalization: modules/audio.md
+      - Pipeline Coordinator: modules/pipeline.md
+      - CLI Application: modules/cli.md

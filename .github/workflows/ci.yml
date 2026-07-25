@@ -13,7 +13,12 @@ on:
       - "Dockerfile"
       - "docker-compose*.yaml"
       - ".dockerignore"
-      - ".github/workflows/**"
+      - ".github/workflows/ci.yml"
+    paths-ignore:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+      - "**.md"
   pull_request:
     branches: [ "main", "master" ]
     paths:
@@ -25,7 +30,12 @@ on:
       - "Dockerfile"
       - "docker-compose*.yaml"
       - ".dockerignore"
-      - ".github/workflows/**"
+      - ".github/workflows/ci.yml"
+    paths-ignore:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+      - "**.md"
   workflow_dispatch:
 
 env:
