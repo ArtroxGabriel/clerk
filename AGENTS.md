@@ -1,3 +1,73 @@
+# Project Overview
+
+`clerk` is a CLI application designed to automate audio extraction, speech-to-text transcription, and Portuguese summary generation from local audio/video media or YouTube URLs.
+
+### Key Capabilities & Features
+
+- **Input Sources**: Supports local media files (`.mp4`, `.mp3`, `.wav`, etc.) and YouTube URLs (downloaded via `yt-dlp` using human-readable video titles).
+- **Audio Normalization**: Normalizes inputs to 16kHz, mono WAV format using `ffmpeg`.
+- **Speech-to-Text (STT)**: Transcribes audio using `faster-whisper` (`BatchedInferencePipeline`) with progress bar logging, VAD filtering, and configurable batch sizes. Outputs both raw `.txt` and timestamped `.srt` files.
+- **LLM Summarization**: Interfaces with a local Ollama instance (`http://127.0.0.1:11434`) to produce structured Portuguese markdown summaries (`## Pontos principais`, `## Decisões`, `## Ações`, `## Pendências` or video equivalents).
+- **CPU vs GPU Strategy**: Features dedicated prompt strategies (`CpuPromptStrategy` for models like `LiquidAI/lfm2.5-1.2b-instruct` and `GpuPromptStrategy` for models like `llama3.1:8b`).
+- **Smart Sentence Chunking**: Automatically breaks long transcripts (> 2000 words) at sentence and clause boundaries to prevent splitting in the middle of sentences or words.
+- **Security & Prompt Injection Protection**: Strips SRT timestamps and wraps prompts in `<<<TRANSCRIPT>>>` and `<<<ITEMS>>>` delimiters. Automatically sanitizes all `<<<...>>>` delimiter tags from final LLM responses (`clean_llm_output`).
+- **Guard Rails & Model Recovery**: Short-circuits empty, garbled, or noise-only transcripts before making LLM calls (`is_meaningful_transcript`). Provides an interactive CLI recovery menu on pipeline/model errors to change LLM models, Whisper models, compute types, or target devices on the fly without re-downloading media.
+
+# File Structure Overview
+
+```text
+clerk/
+├── AGENTS.md                   # Canonical AI agent instructions, project overview & rules
+├── pyproject.toml              # Project configuration, dependencies, CLI entrypoint & scripts
+├── src/
+│   └── clerk/
+│       ├── __init__.py         # Package initialization & version metadata
+│       ├── audio.py            # FFmpeg audio normalization & yt-dlp YouTube audio download
+│       ├── cli.py              # Typer CLI application, upfront option validation & recovery menu
+│       ├── pipeline.py         # End-to-end pipeline execution coordinator
+│       ├── prompts.py          # CPU/GPU prompt strategies, SRT cleaning & tag sanitization
+│       ├── summarize.py        # Ollama API integration, section parsing & smart transcript chunking
+│       └── transcribe.py       # faster-whisper BatchedInferencePipeline speech-to-text engine
+└── tests/
+    ├── test_audio.py           # Tests for audio extraction, yt-dlp downloads & YouTube ID regex
+    ├── test_cli.py             # Tests for CLI flags, presets, option validation & time formatting
+    ├── test_pipeline.py        # Integration tests for end-to-end pipeline execution
+    ├── test_prompts.py         # Tests for prompt strategy generation, noise detection & tag cleaning
+    ├── test_summarize.py       # Tests for transcript chunking, Ollama calls & empty short-circuiting
+    └── test_transcribe.py      # Tests for Whisper STT transcription, batch size & SRT formatting
+```
+
+### Module Descriptions
+
+- **`src/clerk/audio.py`**: Manages `ffmpeg` verification and execution for audio normalization to 16kHz mono WAV, as well as `yt-dlp` YouTube audio extraction with title restriction.
+- **`src/clerk/cli.py`**: Entrypoint for the `clerk` CLI using Typer. Handles preset management (`cpu`, `fast`, `gpu`, `cuda`, `accurate`), option verification (CPU compute type checks), execution time formatting (`hh:mm:ss:mm`), and the interactive recovery loop.
+- **`src/clerk/pipeline.py`**: Orchestrates the sequential pipeline: Audio extraction $\rightarrow$ Whisper STT transcription $\rightarrow$ Ollama LLM summarization $\rightarrow$ Output file creation.
+- **`src/clerk/prompts.py`**: Encapsulates prompt logic into `CpuPromptStrategy` and `GpuPromptStrategy`, provides `clean_srt_for_prompt`, `clean_llm_output` (universal `<<<...>>>` tag stripper), and `is_meaningful_transcript` (noise/hallucination guard rail).
+- **`src/clerk/summarize.py`**: Communicates with the local Ollama `/api/generate` endpoint, handles smart transcript splitting by sentence/clause boundaries (`split_transcript_smart`), and parses summary section markdown headers.
+- **`src/clerk/transcribe.py`**: Loads `WhisperModel` and `BatchedInferencePipeline` from `faster-whisper`, formats SRT blocks, and generates transcript metadata (language, duration, VAD coverage).
+
+# Other Points
+
+### 🛠️ Verification & Developer Commands
+
+Always use the registered `uv` environment runners:
+
+- **Run Tests**: `uv run clerk-test` (Custom runner script ensuring environment sync; do NOT guess standard pytest).
+- **Type Checking**: `uv run pyrefly check` (Pyrefly is our static type checker and LSP).
+- **Linting / Formatting**: `uv run ruff check`
+
+### 🏗️ Architecture & Operation
+
+- **Pipeline Flow**: Input Audio/Video $\rightarrow$ `ffmpeg` normalization (16kHz, Mono WAV) $\rightarrow$ `faster-whisper` transcription $\rightarrow$ local Ollama (`LiquidAI/lfm2.5-1.2b-instruct`) Portuguese meeting points / video summary.
+- **Ollama Endpoint**: Defaults to `http://127.0.0.1:11434/api/generate` with model `LiquidAI/lfm2.5-1.2b-instruct`. Ensure local Ollama is running before execution.
+- **Default Model Name Warning**: Ensure `model_name` passed to the summarizer does not have trailing whitespaces. Use `"LiquidAI/lfm2.5-1.2b-instruct"`.
+
+### ⚠️ Execution & Sandbox Gotchas
+
+- **Command Sandboxing**: In agent sandboxes, running standard test commands or subprocesses might fail with connection reset/sandbox errors. If sandboxed commands fail, retry with **BypassSandbox: true**.
+- **FFmpeg & yt-dlp Requirements**: Ensure `ffmpeg` and `yt-dlp` are installed and accessible in the system `PATH`.
+- **CPU Compute Type Limitations**: `float16` and `int8_float16` compute types are only supported on GPU (`cuda`). CPU mode requires `int8`, `float32`, or `default`.
+
 <!-- ai-memory:start -->
 ## Long-term memory (ai-memory)
 
@@ -67,21 +137,3 @@ latest binary's recommended copy:
 Both are idempotent: re-runs replace the block delimited by the ai-memory
 start/end HTML-comment markers, without disturbing the rest of the file.
 <!-- ai-memory:end -->
-
-## 🤖 Repository-Specific Guidelines
-
-### 🛠️ Verification & Developer Commands
-Always use the registered `uv` environment runners:
-* **Run Tests**: `uv run clerk-test` (Do NOT guess standard `pytest` unless running locally, use this custom script to ensure the environment is synced).
-* **Type Checking**: `uv run pyrefly check` (We use **Pyrefly** as the static type checker and LSP).
-* **Linting / Formatting**: `uv run ruff check`
-
-### 🏗️ Architecture & Operation
-* **Pipeline Flow**: Input Audio/Video $\rightarrow$ `ffmpeg` normalization (16kHz, Mono WAV) $\rightarrow$ `faster-whisper` transcription $\rightarrow$ local Ollama (`LiquidAI/lfm2.5-1.2b-instruct`) Portuguese meeting points.
-* **Ollama Endpoint**: Defaults to `http://127.0.0.1:11434/api/generate` with model `LiquidAI/lfm2.5-1.2b-instruct`. Ensure local Ollama is running.
-* **Default model name warning**: Ensure `model_name` passed to the summarizer does not have trailing whitespaces. Use `"LiquidAI/lfm2.5-1.2b-instruct"`.
-
-### ⚠️ Execution & Sandbox Gotchas
-* **Command Sandboxing**: In agent sandboxes, running standard test commands or subprocesses might fail with connection reset/sandbox errors. If sandboxed commands fail, retry with **BypassSandbox: true**.
-* **Ffmpeg requirement**: Verify ffmpeg is available in the environment path before running extraction.
-
