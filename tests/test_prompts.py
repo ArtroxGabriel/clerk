@@ -74,3 +74,23 @@ def test_prompt_manager_and_strategies() -> None:
     assert "content strategist" in video_prompt_gpu
     assert "<<<TRANSCRIPT>>>" in video_prompt_gpu
     assert "<<<END TRANSCRIPT>>>" in video_prompt_gpu
+
+
+def test_custom_prompt_strategy() -> None:
+    from clerk.prompts import CustomPromptStrategy
+
+    custom_summary = "Custom summary for {language}: {transcript}"
+    custom_consolidation = "Consolidate category {category} in {language}: {items}"
+    strat = CustomPromptStrategy(custom_summary, custom_consolidation)
+
+    p_summary = strat.build_summary_prompt("my transcript", "Portuguese", is_video=False)
+    assert p_summary == "Custom summary for Portuguese: my transcript"
+
+    p_cons = strat.build_consolidation_prompt("Pontos principais", "- item 1", "Portuguese")
+    assert p_cons == "Consolidate category Pontos principais in Portuguese: - item 1"
+
+    no_placeholder_strat = CustomPromptStrategy("Simple summary prompt for {language}")
+    p_auto = no_placeholder_strat.build_summary_prompt("my transcript", "English", is_video=False)
+    assert "Simple summary prompt for English" in p_auto
+    assert "<<<TRANSCRIPT>>>\nmy transcript\n<<<END TRANSCRIPT>>>" in p_auto
+
