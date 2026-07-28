@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://artroxgabriel.github.io/clerk/</loc>
+         <lastmod>2026-07-28</lastmod>
+    </url>
+    <url>
+         <loc>https://artroxgabriel.github.io/clerk/modules/</loc>
+         <lastmod>2026-07-28</lastmod>
+    </url>
+    <url>
+         <loc>https://artroxgabriel.github.io/clerk/modules/audio/</loc>
+         <lastmod>2026-07-28</lastmod>
+    </url>
+    <url>
+         <loc>https://artroxgabriel.github.io/clerk/modules/cli/</loc>
+         <lastmod>2026-07-28</lastmod>
+    </url>
+    <url>
+         <loc>https://artroxgabriel.github.io/clerk/modules/pipeline/</loc>
+         <lastmod>2026-07-28</lastmod>
+    </url>
+    <url>
+         <loc>https://artroxgabriel.github.io/clerk/modules/prompts/</loc>
+         <lastmod>2026-07-28</lastmod>
+    </url>
+    <url>
+         <loc>https://artroxgabriel.github.io/clerk/modules/summarize/</loc>
+         <lastmod>2026-07-28</lastmod>
+    </url>
+    <url>
+         <loc>https://artroxgabriel.github.io/clerk/modules/transcribe/</loc>
+         <lastmod>2026-07-28</lastmod>
+    </url>
+</urlset>
