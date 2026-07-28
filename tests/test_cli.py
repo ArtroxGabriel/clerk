@@ -89,6 +89,10 @@ def test_cli_success_local_file(tmp_path: Path) -> None:
             whisper_batch_size=2,
             is_video=False,
             verbose=True,
+            transcribe_only=False,
+            summarize_only=False,
+            custom_prompt=None,
+            custom_consolidation_prompt=None,
         )
 
 
@@ -137,6 +141,10 @@ def test_cli_gpu_flag(tmp_path: Path) -> None:
             whisper_batch_size=8,
             is_video=False,
             verbose=False,
+            transcribe_only=False,
+            summarize_only=False,
+            custom_prompt=None,
+            custom_consolidation_prompt=None,
         )
 
 
@@ -160,7 +168,13 @@ def test_cli_preset_override(tmp_path: Path) -> None:
             whisper_batch_size=4,
             is_video=False,
             verbose=False,
+            transcribe_only=False,
+            summarize_only=False,
+            custom_prompt=None,
+            custom_consolidation_prompt=None,
         )
+
+
 
 
 def test_cli_invalid_preset(tmp_path: Path) -> None:
@@ -267,6 +281,94 @@ def test_cli_cpu_float16_not_supported(tmp_path: Path) -> None:
     result = runner.invoke(app, ["--target", str(input_file), "-p", "cpu", "--whisper-compute-type", "float16"])
     assert result.exit_code == 1
     assert "requires GPU (cuda)" in result.output
+
+
+def test_cli_transcribe_only_and_summarize_only_mutually_exclusive(tmp_path: Path) -> None:
+    input_file = tmp_path / "sample.mp3"
+    input_file.write_text("mock audio content")
+
+    result = runner.invoke(app, ["--target", str(input_file), "--transcribe-only", "--summarize-only"])
+    assert result.exit_code == 1
+    assert "Cannot specify both --transcribe-only and --summarize-only options simultaneously" in result.output
+
+
+def test_cli_transcribe_only_flag(tmp_path: Path) -> None:
+    input_file = tmp_path / "sample.mp3"
+    input_file.write_text("mock audio content")
+    mock_res_meta = {"timings": {}, "models": {"llm_model": "skipped"}, "word_counts": {}}
+
+    with patch("clerk.cli.run_pipeline", return_value=(Path("out/sample_transcript.srt"), None, mock_res_meta)) as mock_run:
+        result = runner.invoke(app, ["--target", str(input_file), "--transcribe-only"])
+        assert result.exit_code == 0
+        clean_out = _clean_output(result.output)
+        assert "Summary          : N/A (skipped)" in clean_out
+        assert mock_run.call_args[1]["transcribe_only"] is True
+        assert mock_run.call_args[1]["summarize_only"] is False
+
+
+def test_cli_summarize_only_flag(tmp_path: Path) -> None:
+    srt_file = tmp_path / "sample_transcript.srt"
+    srt_file.write_text("1\n00:00:00,000 --> 00:00:02,000\nMock srt")
+    mock_res_meta = {"timings": {}, "models": {"whisper_model": "skipped"}, "word_counts": {}}
+
+    with patch("clerk.cli.run_pipeline", return_value=(srt_file, Path("out/sample_meeting_points.md"), mock_res_meta)) as mock_run:
+        result = runner.invoke(app, ["--target", str(srt_file), "--summarize-only"])
+        assert result.exit_code == 0
+        clean_out = _clean_output(result.output)
+        assert "Whisper          : Skipped" in clean_out
+        assert mock_run.call_args[1]["transcribe_only"] is False
+        assert mock_run.call_args[1]["summarize_only"] is True
+
+
+def test_cli_srt_target_auto_summarize_only(tmp_path: Path) -> None:
+    srt_file = tmp_path / "meeting_transcript.srt"
+    srt_file.write_text("1\n00:00:00,000 --> 00:00:02,000\nMock srt content")
+    mock_res_meta = {"timings": {}, "models": {"whisper_model": "skipped"}, "word_counts": {}}
+
+    with patch("clerk.cli.run_pipeline", return_value=(srt_file, Path("out/meeting_points.md"), mock_res_meta)) as mock_run:
+        result = runner.invoke(app, ["--target", str(srt_file)])
+        assert result.exit_code == 0
+        assert mock_run.call_args[1]["summarize_only"] is True
+
+
+def test_prompt_pipeline_recovery_interactive() -> None:
+    from clerk.cli import _prompt_pipeline_recovery
+
+    with patch("sys.stdin.isatty", return_value=False):
+        llm, whisper, compute, dev, retry = _prompt_pipeline_recovery(
+            RuntimeError("test error"), "llm1", "whisper1", "int8", "cpu"
+        )
+        assert retry is False
+        assert llm == "llm1"
+
+def test_cli_custom_prompt_flags(tmp_path: Path) -> None:
+    input_file = tmp_path / "sample.mp3"
+    input_file.write_text("mock audio content")
+    prompt_file = tmp_path / "custom_p.txt"
+    prompt_file.write_text("My custom prompt template")
+    mock_res_meta = {"timings": {}, "models": {}, "word_counts": {}}
+
+    with patch("clerk.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)) as mock_run:
+        result = runner.invoke(app, ["--target", str(input_file), "--prompt-file", str(prompt_file)])
+        assert result.exit_code == 0
+        assert mock_run.call_args[1]["custom_prompt"] == "My custom prompt template"
+
+
+def test_cli_prompt_and_prompt_file_mutually_exclusive(tmp_path: Path) -> None:
+    input_file = tmp_path / "sample.mp3"
+    input_file.write_text("mock audio content")
+    prompt_file = tmp_path / "custom_p.txt"
+    prompt_file.write_text("My custom prompt template")
+
+    result = runner.invoke(
+        app,
+        ["--target", str(input_file), "--prompt", "inline prompt", "--prompt-file", str(prompt_file)],
+    )
+    assert result.exit_code == 1
+    assert "Cannot specify both --prompt and --prompt-file options simultaneously" in result.output
+
+
+
 
 
 

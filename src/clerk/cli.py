@@ -95,8 +95,8 @@ def format_time_hhmmssmm(seconds: float) -> str:
 
 
 def print_pipeline_status(
-    transcript_path: Path,
-    summary_path: Path,
+    transcript_path: Path | None,
+    summary_path: Path | None,
     output_dir: Path,
     metadata: dict,
     verbose: bool,
@@ -107,20 +107,31 @@ def print_pipeline_status(
     output_files = metadata.get("output_files", {})
     metadata_file = output_files.get("metadata_path", str(output_dir / "transcript_metadata.json"))
 
+    transcript_display = str(transcript_path) if transcript_path else "N/A (skipped)"
+    summary_display = str(summary_path) if summary_path else "N/A (skipped)"
+
     typer.echo("\n==================================================")
     typer.echo("                 Pipeline Status                  ")
     typer.echo("==================================================")
     typer.echo("📁 Output Paths:")
-    typer.echo(f"  • Transcript (SRT) : {transcript_path}")
-    typer.echo(f"  • Summary          : {summary_path}")
+    typer.echo(f"  • Transcript (SRT) : {transcript_display}")
+    typer.echo(f"  • Summary          : {summary_display}")
     typer.echo(f"  • Metadata JSON    : {metadata_file}")
 
     typer.echo("\n🤖 Models Used:")
-    typer.echo(
-        f"  • Whisper          : {models.get('whisper_model')} "
-        f"(device: {models.get('whisper_device')}, compute: {models.get('whisper_compute_type')}, batch_size: {models.get('whisper_batch_size')})"
-    )
-    typer.echo(f"  • LLM              : {models.get('llm_model')}")
+    whisper_model = models.get("whisper_model")
+    if whisper_model == "skipped":
+        typer.echo("  • Whisper          : Skipped")
+    else:
+        typer.echo(
+            f"  • Whisper          : {whisper_model} "
+            f"(device: {models.get('whisper_device')}, compute: {models.get('whisper_compute_type')}, batch_size: {models.get('whisper_batch_size')})"
+        )
+    llm_model = models.get("llm_model")
+    if llm_model == "skipped":
+        typer.echo("  • LLM              : Skipped")
+    else:
+        typer.echo(f"  • LLM              : {llm_model}")
 
     typer.echo("\n⏱️ Execution Time:")
     typer.echo(f"  • Total Time       : {format_time_hhmmssmm(float(timings.get('total_seconds', 0.0)))}")
@@ -145,8 +156,54 @@ def print_pipeline_status(
     typer.echo("==================================================\n")
 
 
+def _prompt_pipeline_recovery(
+    error: Exception,
+    current_llm: str,
+    current_whisper: str,
+    current_compute: str,
+    current_device: str,
+) -> tuple[str, str, str, str, bool]:
+    """Displays interactive recovery options on pipeline error. Returns updated configs and retry flag."""
+    import sys
+
+    if not sys.stdin.isatty():
+        return current_llm, current_whisper, current_compute, current_device, False
+
+    typer.echo(f"\n⚠️  Pipeline error: {error}", err=True)
+    typer.echo("Model or pipeline failure detected. Choose recovery option:", err=True)
+    typer.echo(f"  [1] Enter a new LLM model name (current: {current_llm})")
+    typer.echo(f"  [2] Enter a new Whisper model name (current: {current_whisper})")
+    typer.echo(f"  [3] Change Whisper compute type (current: {current_compute})")
+    typer.echo(f"  [4] Change Whisper device (current: {current_device})")
+    typer.echo("  [5] Retry pipeline with current configuration")
+    typer.echo("  [6] Exit")
+
+    choice = typer.prompt("Select option [1-6]", default="6")
+    if choice == "1":
+        new_llm = typer.prompt("Enter new LLM model name").strip()
+        if new_llm:
+            return new_llm, current_whisper, current_compute, current_device, True
+    elif choice == "2":
+        new_whisper = typer.prompt("Enter new Whisper model name").strip()
+        if new_whisper:
+            return current_llm, new_whisper, current_compute, current_device, True
+    elif choice == "3":
+        new_compute = typer.prompt("Enter new Whisper compute type (e.g. int8, float32, default)").strip()
+        if new_compute:
+            return current_llm, current_whisper, new_compute, current_device, True
+    elif choice == "4":
+        new_dev = typer.prompt("Enter new Whisper device (e.g. cpu, cuda)").strip()
+        if new_dev:
+            return current_llm, current_whisper, current_compute, new_dev, True
+    elif choice == "5":
+        return current_llm, current_whisper, current_compute, current_device, True
+
+    return current_llm, current_whisper, current_compute, current_device, False
+
+
 @app.command()
 def main(
+
     target: str = typer.Option(
         ...,
         "--target",
@@ -181,6 +238,36 @@ def main(
         "--meeting",
         help="Enforce meeting summary prompt template (saves summary to meeting_points.md).",
     ),
+    transcribe_only: bool = typer.Option(
+        False,
+        "--transcribe-only",
+        help="Execute only audio extraction and speech transcription steps.",
+    ),
+    summarize_only: bool = typer.Option(
+        False,
+        "--summarize-only",
+        help="Execute only transcript summarization step (target can be .srt file).",
+    ),
+    prompt: str | None = typer.Option(
+        None,
+        "--prompt",
+        help="Inline custom summary prompt template (supports {transcript} and {language}).",
+    ),
+    prompt_file: Path | None = typer.Option(
+        None,
+        "--prompt-file",
+        help="Path to custom summary prompt template file.",
+    ),
+    consolidation_prompt: str | None = typer.Option(
+        None,
+        "--consolidation-prompt",
+        help="Inline custom consolidation prompt template (supports {category}, {items}, and {language}).",
+    ),
+    consolidation_prompt_file: Path | None = typer.Option(
+        None,
+        "--consolidation-prompt-file",
+        help="Path to custom consolidation prompt template file.",
+    ),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
     configure_logging(verbose)
@@ -197,6 +284,43 @@ def main(
     if gpu and fast:
         typer.echo("Error: Cannot specify both --gpu and --fast options simultaneously.", err=True)
         raise typer.Exit(code=EXIT_ERROR)
+
+    if transcribe_only and summarize_only:
+        typer.echo("Error: Cannot specify both --transcribe-only and --summarize-only options simultaneously.", err=True)
+        raise typer.Exit(code=EXIT_ERROR)
+
+    if prompt and prompt_file:
+        typer.echo("Error: Cannot specify both --prompt and --prompt-file options simultaneously.", err=True)
+        raise typer.Exit(code=EXIT_ERROR)
+
+    if consolidation_prompt and consolidation_prompt_file:
+        typer.echo("Error: Cannot specify both --consolidation-prompt and --consolidation-prompt-file options simultaneously.", err=True)
+        raise typer.Exit(code=EXIT_ERROR)
+
+    effective_custom_prompt: str | None = None
+    if prompt_file:
+        if not prompt_file.exists():
+            typer.echo(f"Error: Prompt file does not exist: {prompt_file}", err=True)
+            raise typer.Exit(code=EXIT_ERROR)
+        if not prompt_file.is_file():
+            typer.echo(f"Error: Prompt file path is not a file: {prompt_file}", err=True)
+            raise typer.Exit(code=EXIT_ERROR)
+        effective_custom_prompt = prompt_file.read_text(encoding="utf-8")
+    elif prompt:
+        effective_custom_prompt = prompt
+
+    effective_custom_consolidation_prompt: str | None = None
+    if consolidation_prompt_file:
+        if not consolidation_prompt_file.exists():
+            typer.echo(f"Error: Consolidation prompt file does not exist: {consolidation_prompt_file}", err=True)
+            raise typer.Exit(code=EXIT_ERROR)
+        if not consolidation_prompt_file.is_file():
+            typer.echo(f"Error: Consolidation prompt file path is not a file: {consolidation_prompt_file}", err=True)
+            raise typer.Exit(code=EXIT_ERROR)
+        effective_custom_consolidation_prompt = consolidation_prompt_file.read_text(encoding="utf-8")
+    elif consolidation_prompt:
+        effective_custom_consolidation_prompt = consolidation_prompt
+
 
     gpu_supported = is_gpu_available()
     allowed_presets = (
@@ -311,6 +435,9 @@ def main(
             typer.echo(f"Error: Input path is not a file: {local_path}", err=True)
             raise typer.Exit(code=EXIT_ERROR)
 
+        if local_path.suffix.lower() == ".srt" and not transcribe_only:
+            summarize_only = True
+
     if video:
         is_video = True
     elif meeting:
@@ -343,47 +470,36 @@ def main(
                     whisper_batch_size=effective_whisper_batch_size,
                     is_video=is_video,
                     verbose=verbose,
+                    transcribe_only=transcribe_only,
+                    summarize_only=summarize_only,
+                    custom_prompt=effective_custom_prompt,
+                    custom_consolidation_prompt=effective_custom_consolidation_prompt,
                 )
                 break
+
+
             except (KeyboardInterrupt, typer.Exit):
                 raise
             except Exception as e:
-                import sys
-
-                if sys.stdin.isatty():
-                    typer.echo(f"\n⚠️  Pipeline error: {e}", err=True)
-                    typer.echo("Model or pipeline failure detected. Choose recovery option:", err=True)
-                    typer.echo(f"  [1] Enter a new LLM model name (current: {effective_llm_model})")
-                    typer.echo(f"  [2] Enter a new Whisper model name (current: {effective_whisper_model})")
-                    typer.echo(f"  [3] Change Whisper compute type (current: {effective_whisper_compute_type})")
-                    typer.echo(f"  [4] Change Whisper device (current: {effective_whisper_device})")
-                    typer.echo("  [5] Retry pipeline with current configuration")
-                    typer.echo("  [6] Exit")
-                    choice = typer.prompt("Select option [1-6]", default="6")
-                    if choice == "1":
-                        new_llm = typer.prompt("Enter new LLM model name").strip()
-                        if new_llm:
-                            effective_llm_model = new_llm
-                            continue
-                    elif choice == "2":
-                        new_whisper = typer.prompt("Enter new Whisper model name").strip()
-                        if new_whisper:
-                            effective_whisper_model = new_whisper
-                            continue
-                    elif choice == "3":
-                        new_compute = typer.prompt("Enter new Whisper compute type (e.g. int8, float32, default)").strip()
-                        if new_compute:
-                            effective_whisper_compute_type = new_compute
-                            continue
-                    elif choice == "4":
-                        new_dev = typer.prompt("Enter new Whisper device (e.g. cpu, cuda)").strip()
-                        if new_dev:
-                            effective_whisper_device = new_dev
-                            continue
-                    elif choice == "5":
-                        continue
+                (
+                    effective_llm_model,
+                    effective_whisper_model,
+                    effective_whisper_compute_type,
+                    effective_whisper_device,
+                    retry,
+                ) = _prompt_pipeline_recovery(
+                    error=e,
+                    current_llm=effective_llm_model,
+                    current_whisper=effective_whisper_model,
+                    current_compute=effective_whisper_compute_type,
+                    current_device=effective_whisper_device,
+                )
+                if retry:
+                    continue
                 logger.exception("Pipeline execution failed")
                 raise typer.Exit(code=EXIT_ERROR)
+
+
 
         print_pipeline_status(
             transcript_path=transcript_path,
