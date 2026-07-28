@@ -1,6 +1,6 @@
 [project]
 name = "clerk"
-version = "0.1.0"
+version = "1.0.0"
 description = "Local pipeline for transcription and meeting bullet points"
 readme = "README.md"
 authors = [{ name = "Gabrigas", email = "artroxgabriel@gmail.com" }]

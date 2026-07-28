@@ -8,13 +8,13 @@ The `pipeline` module orchestrates the sequential execution of audio extraction,
 
 ```mermaid
 graph TD
-    A["run_pipeline() Entrypoint"] --> B["1. Audio Extraction (src/clerk/audio.py)"]
-    B --> C["2. STT Transcription (src/clerk/transcribe.py)"]
-    C --> D["3. LLM Summarization (src/clerk/summarize.py)"]
-    D --> E["4. Metrics Collection & JSON Serialization"]
-    E --> F["Write <stem>_transcript.srt"]
-    E --> G["Write <stem>_meeting_points.md"]
-    E --> H["Write <stem>_metadata.json"]
+    A["run_pipeline() Entrypoint"] --> B{"Step Execution Mode"}
+    B -->|Full Pipeline| C["1. Audio Extraction"]
+    C --> D["2. STT Transcription"]
+    D --> E["3. LLM Summarization"]
+    B -->|transcribe_only| C
+    B -->|summarize_only| E
+    C & D & E --> F["4. Uniform Metadata Building (_build_pipeline_metadata)"]
 ```
 
 ---
@@ -22,9 +22,9 @@ graph TD
 ## 🛠️ Key Implementation Methods
 
 ### `run_pipeline(...)`
-Main orchestration entrypoint.
+Main orchestration entrypoint supporting full pipeline, `--transcribe-only`, and `--summarize-only` isolated step execution modes.
 
-**Signatures & Parameters**:
+**Signature & Parameters**:
 ```python
 def run_pipeline(
     input_path: Path,
@@ -37,8 +37,15 @@ def run_pipeline(
     whisper_batch_size: int = 2,
     is_video: bool = False,
     verbose: bool = False,
-) -> tuple[Path, Path, dict]
+    transcribe_only: bool = False,
+    summarize_only: bool = False,
+) -> tuple[Path | None, Path | None, dict]
 ```
+
+### Isolated Step Modes:
+- **`transcribe_only=True`**: Executes audio extraction and speech-to-text transcription. Skips LLM summarization (`summary_path` is `None`, `models.llm_model` is `"skipped"`).
+- **`summarize_only=True`**: Reads transcript directly from `.srt` or `.txt` input files (auto-detected when target ends with `.srt`). Skips audio extraction and transcription (`models.whisper_model` is `"skipped"`).
+
 
 **Output Naming Conventions**:
 Based on `input_path.stem`:

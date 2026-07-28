@@ -1,6 +1,7 @@
-# Module: `src/clerk/prompts.py`
+# Package: `src/clerk/prompts/`
 
-The `prompts` module encapsulates prompt engineering strategies, security delimiters, SRT transcript cleaning, output sanitization, and ASR noise guard rails for LLM summarization.
+The `prompts` package encapsulates prompt engineering strategies, security delimiters, SRT transcript cleaning, output sanitization, and ASR noise guard rails for LLM summarization across modular strategy files (`base.py`, `cleaners.py`, `cpu.py`, `gpu.py`).
+
 
 ---
 
@@ -108,6 +109,14 @@ Acts as a code-level guard rail to detect empty, noise-only, or garbled ASR outp
 3. Rejects text if word count is less than `min_words` (default: 3).
 4. Rejects text if unique word count is $\le 1$ for inputs with $\ge 3$ words (ASR hallucination detection).
 
+### `CustomPromptStrategy`
+Custom prompt strategy enabling full control over stage 1 summary/chunk prompts and stage 2 consolidation prompts.
+
+- **Summary Prompt Placeholders**: `{transcript}`, `{language}`
+- **Consolidation Prompt Placeholders**: `{category}`, `{items}`, `{language}`
+
+If `{transcript}` or `{items}` placeholders are omitted from a custom template string, data is automatically appended inside security delimiters (`<<<TRANSCRIPT>>>` / `<<<ITEMS>>>`).
+
 ---
 
 ## 📖 Public API Reference
@@ -118,4 +127,6 @@ Acts as a code-level guard rail to detect empty, noise-only, or garbled ASR outp
 | `clean_llm_output(text)` | `text: str` | `str` | Strips all `<<<...>>>` tag variations. |
 | `is_meaningful_transcript(transcript, min_words)` | `transcript: str`, `min_words: int = 3` | `bool` | Returns `True` if transcript contains speech. |
 | `get_language_name(lang_code)` | `lang_code: str \| None` | `str` | Resolves ISO language codes (`pt` $\rightarrow$ `Portuguese`). |
-| `PromptManager.get_strategy(is_gpu_model)` | `is_gpu_model: bool = False` | `PromptStrategy` | Returns `CpuPromptStrategy` or `GpuPromptStrategy`. |
+| `CustomPromptStrategy(summary_template, consolidation_template)` | `summary_template: str \| None`, `consolidation_template: str \| None` | `PromptStrategy` | Custom user-defined prompt strategy. |
+| `PromptManager.get_strategy(is_gpu_model, custom_prompt, custom_consolidation_prompt)` | `is_gpu_model: bool`, `custom_prompt: str \| None`, `custom_consolidation_prompt: str \| None` | `PromptStrategy` | Returns `CpuPromptStrategy`, `GpuPromptStrategy`, or `CustomPromptStrategy`. |
+

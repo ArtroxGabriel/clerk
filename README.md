@@ -103,6 +103,12 @@ uv run clerk --target <path_or_youtube_url> [OPTIONS]
 | `--preset`, `-p` | `str` | `cpu` | Configuration profile (`cpu`, `fast`, `gpu`, `cuda`, `accurate`) |
 | `--gpu` | `flag` | `False` | Shortcut for `--preset gpu` |
 | `--fast` | `flag` | `False` | Shortcut for `--preset fast` |
+| `--transcribe-only` | `flag` | `False` | Execute only audio extraction and speech transcription steps |
+| `--summarize-only` | `flag` | `False` | Execute only transcript summarization step (auto-detected if target is `.srt`) |
+| `--prompt` | `str` | `None` | Inline custom summary prompt template (supports `{transcript}` and `{language}`) |
+| `--prompt-file` | `path` | `None` | Path to custom summary prompt template file |
+| `--consolidation-prompt` | `str` | `None` | Inline custom consolidation prompt template (supports `{category}`, `{items}`, `{language}`) |
+| `--consolidation-prompt-file` | `path` | `None` | Path to custom consolidation prompt template file |
 | `--whisper-batch-size` | `int` | `2` | Transcription batch size (higher values increase speed & memory usage) |
 | `--whisper-model` | `str` | *(preset)* | Whisper model size (`tiny`, `small`, `medium`, `large-v3`) |
 | `--whisper-device` | `str` | *(preset)* | Compute device (`cpu` or `cuda`) |
@@ -112,6 +118,34 @@ uv run clerk --target <path_or_youtube_url> [OPTIONS]
 | `--video` | `flag` | `False` | Enforce video summary prompt template (saves summary to `<stem>_resume.md`) |
 | `--meeting` | `flag` | `False` | Enforce meeting summary prompt template (saves summary to `<stem>_meeting_points.md`) |
 | `--verbose` | `flag` | `False` | Enable detailed step timing logs |
+
+### ⚡ Isolated Step Execution
+
+You can run individual stages of the pipeline independently without re-executing the entire workflow:
+
+- **Transcribe Only**:
+  ```bash
+  uv run clerk --target audio.mp3 --transcribe-only
+  ```
+- **Summarize Only** (Target `.srt` transcript or existing audio/video with `.srt` present):
+  ```bash
+  uv run clerk --target output/sample_transcript.srt
+  ```
+
+### 🎨 Custom Prompt Overrides
+
+Override default prompts for stage 1 (summary/chunk) or stage 2 (item consolidation):
+
+```bash
+# Custom summary prompt file
+uv run clerk --target video.mp4 --prompt-file my_summary_prompt.txt
+
+# Dual prompt overrides
+uv run clerk --target meeting.mp3 \
+  --prompt-file prompts/chunk_summary.txt \
+  --consolidation-prompt-file prompts/merge_items.txt
+```
+
 
 ---
 

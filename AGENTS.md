@@ -8,7 +8,9 @@
 - **Audio Normalization**: Normalizes inputs to 16kHz, mono WAV format using `ffmpeg`.
 - **Speech-to-Text (STT)**: Transcribes audio using `faster-whisper` (`BatchedInferencePipeline`) with progress bar logging, VAD filtering, and configurable batch sizes. Outputs both raw `.txt` and timestamped `.srt` files.
 - **LLM Summarization**: Interfaces with a local Ollama instance (`http://127.0.0.1:11434`) to produce structured Portuguese markdown summaries (`## Pontos principais`, `## Decisões`, `## Ações`, `## Pendências` or video equivalents).
-- **CPU vs GPU Strategy**: Features dedicated prompt strategies (`CpuPromptStrategy` for models like `LiquidAI/lfm2.5-1.2b-instruct` and `GpuPromptStrategy` for models like `llama3.1:8b`).
+- **CPU vs GPU Strategy**: Features dedicated prompt strategies (`CpuPromptStrategy` for models like `LiquidAI/lfm2.5-1.2b-instruct`, `GpuPromptStrategy` for models like `llama3.1:8b`, and `CustomPromptStrategy` for custom templates).
+- **Custom Prompt Overrides**: Supports overriding stage 1 summary/chunk prompts (`--prompt` or `--prompt-file`) and stage 2 consolidation prompts (`--consolidation-prompt` or `--consolidation-prompt-file`) with `{transcript}`, `{category}`, `{items}`, and `{language}` placeholder substitution.
+- **Isolated Step Execution**: Supports running only transcription (`--transcribe-only`) or only summarization (`--summarize-only` or passing `.srt` targets directly).
 - **Smart Sentence Chunking**: Automatically breaks long transcripts (> 2000 words) at sentence and clause boundaries to prevent splitting in the middle of sentences or words.
 - **Security & Prompt Injection Protection**: Strips SRT timestamps and wraps prompts in `<<<TRANSCRIPT>>>` and `<<<ITEMS>>>` delimiters. Automatically sanitizes all `<<<...>>>` delimiter tags from final LLM responses (`clean_llm_output`).
 - **Guard Rails & Model Recovery**: Short-circuits empty, garbled, or noise-only transcripts before making LLM calls (`is_meaningful_transcript`). Provides an interactive CLI recovery menu on pipeline/model errors to change LLM models, Whisper models, compute types, or target devices on the fly without re-downloading media.
@@ -24,15 +26,21 @@ clerk/
 │       ├── __init__.py         # Package initialization & version metadata
 │       ├── audio.py            # FFmpeg audio normalization & yt-dlp YouTube audio download
 │       ├── cli.py              # Typer CLI application, upfront option validation & recovery menu
-│       ├── pipeline.py         # End-to-end pipeline execution coordinator
-│       ├── prompts.py          # CPU/GPU prompt strategies, SRT cleaning & tag sanitization
+│       ├── pipeline.py         # End-to-end pipeline coordinator & isolated step handlers
+│       ├── prompts/            # Prompts subpackage
+│       │   ├── __init__.py     # Package re-exports
+│       │   ├── base.py         # PromptStrategy protocol, PromptManager & language utils
+│       │   ├── cleaners.py     # SRT timestamp cleaner, tag sanitizer & noise guard rails
+│       │   ├── cpu.py          # CpuPromptStrategy (compact rules for CPU models)
+│       │   ├── gpu.py          # GpuPromptStrategy (expressive guidelines for GPU models)
+│       │   └── custom.py       # CustomPromptStrategy (template substitution & fallback)
 │       ├── summarize.py        # Ollama API integration, section parsing & smart transcript chunking
 │       └── transcribe.py       # faster-whisper BatchedInferencePipeline speech-to-text engine
 └── tests/
     ├── test_audio.py           # Tests for audio extraction, yt-dlp downloads & YouTube ID regex
     ├── test_cli.py             # Tests for CLI flags, presets, option validation & time formatting
-    ├── test_pipeline.py        # Integration tests for end-to-end pipeline execution
-    ├── test_prompts.py         # Tests for prompt strategy generation, noise detection & tag cleaning
+    ├── test_pipeline.py        # Integration tests for end-to-end pipeline & step execution
+    ├── test_prompts.py         # Tests for prompt strategy generation, noise detection & custom templates
     ├── test_summarize.py       # Tests for transcript chunking, Ollama calls & empty short-circuiting
     └── test_transcribe.py      # Tests for Whisper STT transcription, batch size & SRT formatting
 ```
@@ -40,11 +48,12 @@ clerk/
 ### Module Descriptions
 
 - **`src/clerk/audio.py`**: Manages `ffmpeg` verification and execution for audio normalization to 16kHz mono WAV, as well as `yt-dlp` YouTube audio extraction with title restriction.
-- **`src/clerk/cli.py`**: Entrypoint for the `clerk` CLI using Typer. Handles preset management (`cpu`, `fast`, `gpu`, `cuda`, `accurate`), option verification (CPU compute type checks), execution time formatting (`hh:mm:ss:mm`), and the interactive recovery loop.
-- **`src/clerk/pipeline.py`**: Orchestrates the sequential pipeline: Audio extraction $\rightarrow$ Whisper STT transcription $\rightarrow$ Ollama LLM summarization $\rightarrow$ Output file creation.
-- **`src/clerk/prompts.py`**: Encapsulates prompt logic into `CpuPromptStrategy` and `GpuPromptStrategy`, provides `clean_srt_for_prompt`, `clean_llm_output` (universal `<<<...>>>` tag stripper), and `is_meaningful_transcript` (noise/hallucination guard rail).
-- **`src/clerk/summarize.py`**: Communicates with the local Ollama `/api/generate` endpoint, handles smart transcript splitting by sentence/clause boundaries (`split_transcript_smart`), and parses summary section markdown headers.
+- **`src/clerk/cli.py`**: Entrypoint for the `clerk` CLI using Typer. Handles preset management (`cpu`, `fast`, `gpu`, `cuda`, `accurate`), option verification (CPU compute type checks), execution time formatting (`hh:mm:ss:mm`), custom prompt flags, and the interactive recovery loop.
+- **`src/clerk/pipeline.py`**: Orchestrates sequential or isolated pipeline steps: Audio extraction $\rightarrow$ Whisper STT transcription $\rightarrow$ Ollama LLM summarization $\rightarrow$ Output file creation.
+- **`src/clerk/prompts/`**: Encapsulates prompt strategy logic (`CpuPromptStrategy`, `GpuPromptStrategy`, `CustomPromptStrategy`), provides `clean_srt_for_prompt`, `clean_llm_output` (universal `<<<...>>>` tag stripper), and `is_meaningful_transcript` (noise/hallucination guard rail).
+- **`src/clerk/summarize.py`**: Communicates with local Ollama `/api/generate` endpoint, handles smart transcript splitting by sentence/clause boundaries (`split_transcript_smart`), and parses summary section markdown headers.
 - **`src/clerk/transcribe.py`**: Loads `WhisperModel` and `BatchedInferencePipeline` from `faster-whisper`, formats SRT blocks, and generates transcript metadata (language, duration, VAD coverage).
+
 
 # Other Points
 
