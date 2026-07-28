@@ -176,3 +176,16 @@ def test_summarize_auto_model_pull() -> None:
         assert res == "## Pontos principais\n- Pulled model summary"
         assert mock_client.post.call_count == 4
 
+
+def test_unload_ollama_model_handles_exception() -> None:
+    from clerk.summarize import unload_ollama_model
+
+    mock_client = MagicMock()
+    mock_client.post.side_effect = Exception("Connection error")
+    mock_client.__enter__.return_value = mock_client
+
+    with patch("httpx.Client", return_value=mock_client):
+        # Should not raise exception when unloading fails
+        unload_ollama_model("test_model", "http://localhost:11434")
+
+
