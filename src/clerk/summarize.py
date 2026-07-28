@@ -238,6 +238,8 @@ def summarize_transcript(
     language: str = "pt",
     is_video: bool = False,
     is_gpu_model: bool = False,
+    custom_prompt: str | None = None,
+    custom_consolidation_prompt: str | None = None,
 ) -> str:
     if base_url is None:
         base_url = os.environ.get("OLLAMA_BASE_URL", DEFAULT_OLLAMA_BASE_URL)
@@ -256,7 +258,12 @@ def summarize_transcript(
         if "llama3" in lower_m or "gpu" in lower_m or "cuda" in lower_m or "8b" in lower_m:
             is_gpu_model = True
 
-    prompt_strategy = PromptManager.get_strategy(is_gpu_model)
+    prompt_strategy = PromptManager.get_strategy(
+        is_gpu_model=is_gpu_model,
+        custom_prompt=custom_prompt,
+        custom_consolidation_prompt=custom_consolidation_prompt,
+    )
+
 
     words = cleaned_transcript.split()
     try:
