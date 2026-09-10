@@ -391,6 +391,15 @@ def main(
         )
         raise typer.Exit(code=EXIT_ERROR)
 
+    env_gpu = os.environ.get("ENABLE_GPU", "").strip().lower()
+    if env_gpu in ("true", "1", "yes", "on", "enable", "enabled"):
+        if selected_preset in ("cpu", "fast") or effective_whisper_device.lower() == "cpu":
+            typer.echo(
+                "Warning: Running in CPU mode inside a GPU-enabled container. "
+                "For CPU workloads, consider using the lightweight clerk:cpu image (saves ~4GB).",
+                err=True,
+            )
+
     if effective_whisper_compute_type.lower() not in VALID_COMPUTE_TYPES:
         allowed_types = ", ".join(sorted(list(VALID_COMPUTE_TYPES)))
         typer.echo(
