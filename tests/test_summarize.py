@@ -217,3 +217,53 @@ def test_summarize_auto_pull_offline_failure() -> None:
             summarize_transcript("This is a valid meeting transcript with content")
 
 
+class FakeLLMBackend:
+    """Named fake LLMBackend for isolated summarizer tests."""
+
+    def __init__(self, response_text: str = "## Pontos principais\n- Fake point") -> None:
+        self.response_text = response_text
+        self.generated_prompts: list[str] = []
+        self.cleaned_up: bool = False
+
+    def generate(self, prompt: str) -> str:
+        self.generated_prompts.append(prompt)
+        return self.response_text
+
+    def cleanup(self) -> None:
+        self.cleaned_up = True
+
+
+def test_summarize_uses_injected_backend() -> None:
+    # Arrange
+    fake_backend = FakeLLMBackend("## Pontos principais\n- Injected summary point")
+
+    # Act
+    result = summarize_transcript("This is a valid meeting transcript with content", backend=fake_backend)
+
+    # Assert
+    assert result == "## Pontos principais\n- Injected summary point"
+    assert len(fake_backend.generated_prompts) == 1
+    assert fake_backend.cleaned_up is True
+
+
+def test_summarize_cleans_up_backend_on_error() -> None:
+    # Arrange
+    class FailingBackend:
+        def __init__(self) -> None:
+            self.cleaned_up = False
+
+        def generate(self, prompt: str) -> str:
+            raise RuntimeError("Inference failed")
+
+        def cleanup(self) -> None:
+            self.cleaned_up = True
+
+    failing_backend = FailingBackend()
+
+    # Act & Assert
+    with pytest.raises(RuntimeError, match="Inference failed"):
+        summarize_transcript("This is a valid meeting transcript with content", backend=failing_backend)
+
+    assert failing_backend.cleaned_up is True
+
+
