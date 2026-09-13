@@ -1,36 +1,43 @@
-# ---------- Stage 1: builder ----------
-FROM python:3.14-slim AS builder
+ARG PYTHON_VERSION=3.14
+ARG DEBIAN_SUITE=trixie
+ARG YT_DLP_VERSION=2026.07.04
 
-# Build-time system dependencies
+# ---------- Stage 1: builder ----------
+FROM ghcr.io/astral-sh/uv:python${PYTHON_VERSION}-${DEBIAN_SUITE}-slim AS builder
+ARG YT_DLP_VERSION
+
+# Build-time system dependencies (curl only needed to fetch yt-dlp)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
-    && curl -fL https://github.com/yt-dlp/yt-dlp/releases/download/2026.07.04/yt-dlp -o /usr/local/bin/yt-dlp \
+    && curl -fL "https://github.com/yt-dlp/yt-dlp/releases/download/${YT_DLP_VERSION}/yt-dlp" -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp \
     && rm -rf /var/lib/apt/lists/*
 
-# Pin uv
-COPY --from=ghcr.io/astral-sh/uv:0.7.13 /uv /uvx /bin/
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_NO_DEV=1 \
+    UV_PYTHON_DOWNLOADS=0
 
 WORKDIR /app
 
-ENV UV_COMPILE_BYTECODE=1
-ENV UV_LINK_MODE=copy
-
-# Install CPU dependencies with layer caching
-COPY pyproject.toml uv.lock ./
+# Step 1: install deps only (cached until pyproject.toml or uv.lock changes)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev
+    --mount=type=bind,source=pyproject.toml,target=/app/pyproject.toml,readonly \
+    --mount=type=bind,source=uv.lock,target=/app/uv.lock,readonly \
+    uv sync --locked --no-install-project
 
-# Copy source and install clerk project
-COPY src/ ./src/
-COPY README.md ./
+# Step 2: install the project itself (cached until src/, README.md, pyproject.toml or uv.lock changes)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev && \
-    find /app/.venv -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+    --mount=type=bind,source=pyproject.toml,target=/app/pyproject.toml,readonly \
+    --mount=type=bind,source=uv.lock,target=/app/uv.lock,readonly \
+    --mount=type=bind,source=README.md,target=/app/README.md,readonly \
+    --mount=type=bind,source=src,target=/app/src,readonly \
+    uv sync --locked --no-editable && \
+    { find /app/.venv -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true; }
 
 # ---------- Stage 2: runtime ----------
-FROM python:3.14-slim AS runtime
+FROM python:${PYTHON_VERSION}-slim-${DEBIAN_SUITE} AS runtime
 
 # Runtime system dependencies (ffmpeg for audio normalization)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -38,10 +45,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-ARG UID=1000
-ARG GID=1000
-RUN groupadd -g "$GID" app && \
-    useradd -l -m -u "$UID" -g "$GID" -d /home/app app && \
+ARG APP_UID=1000
+
+RUN groupadd -g "$APP_UID" app && \
+    useradd -l -m -u "$APP_UID" -g "$APP_UID" -d /home/app app && \
     mkdir -p /home/app/.cache/huggingface /workspace && \
     chown -R app:app /home/app /workspace && \
     chmod -R 777 /home/app/.cache
@@ -51,16 +58,18 @@ WORKDIR /app
 # Copy artifacts from builder
 COPY --from=builder /usr/local/bin/yt-dlp /usr/local/bin/yt-dlp
 COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /app/src /app/src
-COPY --from=builder /app/README.md /app/README.md
 
-ENV PATH="/app/.venv/bin:$PATH"
-ENV ENABLE_GPU=false
+# Put virtualenv binaries at the front of PATH
+ENV PATH="/app/.venv/bin:$PATH" \
+    ENABLE_GPU=false
 
 WORKDIR /workspace
 
-USER app
+USER ${APP_UID}:${APP_UID}
+
 LABEL org.opencontainers.image.source="https://github.com/ArtroxGabriel/clerk"
 LABEL org.opencontainers.image.description="Clerk (CPU) - Local meeting & audio transcription pipeline"
+
+STOPSIGNAL SIGTERM
 
 ENTRYPOINT ["clerk"]

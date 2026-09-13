@@ -2,14 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-import os
 import re
 
-import httpx
-
+from .backends import (
+    DEFAULT_LLM_MODEL,
+    DEFAULT_TIMEOUT_SECONDS,
+    LLMBackend,
+    OllamaBackend,
+    get_backend,
+)
+from .backends.ollama import UNLOAD_TIMEOUT_SECONDS
 from .prompts import (
     PromptManager,
-    clean_llm_output,
+    PromptStrategy,
     clean_srt_for_prompt,
     get_language_name,
     is_meaningful_transcript,
@@ -17,12 +22,6 @@ from .prompts import (
 
 logger = logging.getLogger(__name__)
 
-
-DEFAULT_LLM_MODEL = "LiquidAI/lfm2.5-1.2b-instruct"
-DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434"
-DEFAULT_TIMEOUT_SECONDS = 300.0
-UNLOAD_TIMEOUT_SECONDS = 10.0
-PULL_TIMEOUT_SECONDS = 600.0
 DEFAULT_MAX_WORDS_PER_CHUNK = 2000
 
 
@@ -133,16 +132,7 @@ def unload_ollama_model(
     timeout_seconds: float = UNLOAD_TIMEOUT_SECONDS,
 ) -> None:
     """Unload model from Ollama memory by posting keep_alive: 0."""
-    payload = {
-        "model": model_name,
-        "keep_alive": 0,
-    }
-    try:
-        with httpx.Client(base_url=base_url, timeout=timeout_seconds) as client:
-            client.post("/api/generate", json=payload)
-        logger.info("Unloaded Ollama model '%s' from memory", model_name)
-    except Exception as e:
-        logger.warning("Failed to unload Ollama model '%s': %s", model_name, e)
+    OllamaBackend(model_name=model_name, base_url=base_url, timeout_seconds=timeout_seconds).cleanup()
 
 
 def parse_summary_sections(summary: str, is_video: bool = False) -> dict[str, list[str]]:
@@ -194,52 +184,62 @@ def _call_ollama_generate(
     base_url: str,
     timeout_seconds: float,
 ) -> str:
-    payload = {
-        "model": model_name,
-        "prompt": prompt,
-        "stream": False,
-    }
+    backend = OllamaBackend(model_name=model_name, base_url=base_url, timeout_seconds=timeout_seconds)
+    return backend.generate(prompt)
 
-    try:
-        with httpx.Client(base_url=base_url, timeout=timeout_seconds) as client:
-            response = client.post("/api/generate", json=payload)
 
-            if response.status_code != 200 and ("not found" in response.text.lower() or response.status_code == 404):
-                logger.info("Model '%s' not found locally in Ollama. Attempting automatic model pull...", model_name)
-                try:
-                    pull_resp = client.post(
-                        "/api/pull",
-                        json={"name": model_name, "stream": False},
-                        timeout=PULL_TIMEOUT_SECONDS,
-                    )
-                    if pull_resp.status_code == 200:
-                        logger.info("Model '%s' successfully pulled. Resuming generation...", model_name)
-                        response = client.post("/api/generate", json=payload)
-                    else:
-                        logger.error("Failed to pull model '%s' from Ollama: %s", model_name, pull_resp.text)
-                        raise RuntimeError(
-                            f"ollama request failed: Model '{model_name}' not found locally and auto-pull failed. "
-                            f"To pull manually, run 'ollama pull {model_name}'."
-                        )
-                except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as pull_err:
-                    logger.error("Network error while pulling model '%s': %s", model_name, pull_err)
-                    raise RuntimeError(
-                        f"ollama request failed: Model '{model_name}' not found locally and cannot be pulled while offline. "
-                        f"Run 'ollama pull {model_name}'."
-                    ) from pull_err
+def _process_chunks(
+    chunks: list[str],
+    prompt_strategy: PromptStrategy,
+    backend: LLMBackend,
+    lang_name: str,
+    is_video: bool,
+    config: SummaryConfig,
+) -> dict[str, list[str]]:
+    """Generates and parses section items for each transcript chunk."""
+    combined_sections: dict[str, list[str]] = {sec: [] for sec in config.sections}
+    for i, chunk in enumerate(chunks):
+        logger.info("Summarizing chunk %d/%d...", i + 1, len(chunks))
+        prompt = prompt_strategy.build_summary_prompt(
+            transcript=chunk,
+            language=lang_name,
+            is_video=is_video,
+        )
+        summary = backend.generate(prompt)
+        if summary:
+            chunk_sections = parse_summary_sections(summary, is_video=is_video)
+            for sec, items in chunk_sections.items():
+                if sec in combined_sections:
+                    combined_sections[sec].extend(items)
+    return combined_sections
 
-            if response.status_code != 200:
-                logger.error("Ollama request failed: %s %s", response.status_code, response.text)
-                raise RuntimeError(f"ollama request failed: {response.status_code} {response.text.strip()}")
 
-            data = response.json()
-            content = data.get("response", "").strip()
-            return clean_llm_output(content)
-    except (httpx.ConnectError, httpx.ConnectTimeout) as e:
-        logger.error("Could not connect to Ollama at %s: %s", base_url, e)
-        raise RuntimeError(
-            f"ollama request failed: Could not connect to local Ollama server at {base_url}. Ensure Ollama is running ('ollama serve')."
-        ) from e
+def _consolidate_sections(
+    combined_sections: dict[str, list[str]],
+    prompt_strategy: PromptStrategy,
+    backend: LLMBackend,
+    lang_name: str,
+    config: SummaryConfig,
+) -> str:
+    """Consolidates accumulated section items into structured markdown."""
+    logger.info("Consolidating section summaries...")
+    summaries: dict[str, str] = {}
+    for sec in config.sections:
+        items = combined_sections.get(sec, [])
+        if not items:
+            summaries[sec] = format_empty_fallback(sec, config.primary_section)
+            continue
+
+        items_text = "\n".join(f"- {item}" for item in items)
+        prompt = prompt_strategy.build_consolidation_prompt(
+            category=sec,
+            items=items_text,
+            language=lang_name,
+        )
+        content = backend.generate(prompt)
+        summaries[sec] = content or format_empty_fallback(sec, config.primary_section)
+
+    return "\n\n".join(f"## {sec}\n{summaries[sec]}" for sec in config.sections).strip()
 
 
 def summarize_transcript(
@@ -253,10 +253,9 @@ def summarize_transcript(
     is_gpu_model: bool = False,
     custom_prompt: str | None = None,
     custom_consolidation_prompt: str | None = None,
+    backend: LLMBackend | None = None,
 ) -> str:
-    if base_url is None:
-        base_url = os.environ.get("OLLAMA_BASE_URL", DEFAULT_OLLAMA_BASE_URL)
-
+    """Generates structured summary for a transcript using an LLM backend."""
     cleaned_transcript = clean_srt_for_prompt(transcript)
     if not transcript or not transcript.strip() or not is_meaningful_transcript(transcript):
         logger.error("Transcript is empty, garbled, or contains insufficient speech content")
@@ -265,10 +264,9 @@ def summarize_transcript(
     lang_name = get_language_name(language)
     config = get_summary_config(is_video)
 
-    # Detect GPU model if not explicitly specified
     if not is_gpu_model:
         lower_m = model_name.lower()
-        if "llama3" in lower_m or "gpu" in lower_m or "cuda" in lower_m or "8b" in lower_m:
+        if any(kw in lower_m for kw in ("llama3", "gpu", "cuda", "8b")):
             is_gpu_model = True
 
     prompt_strategy = PromptManager.get_strategy(
@@ -276,7 +274,12 @@ def summarize_transcript(
         custom_prompt=custom_prompt,
         custom_consolidation_prompt=custom_consolidation_prompt,
     )
-
+    active_backend = backend or get_backend(
+        "ollama",
+        model_name=model_name,
+        base_url=base_url,
+        timeout_seconds=timeout_seconds,
+    )
 
     words = cleaned_transcript.split()
     try:
@@ -286,72 +289,19 @@ def summarize_transcript(
                 language=lang_name,
                 is_video=is_video,
             )
-            content = _call_ollama_generate(
-                prompt=prompt,
-                model_name=model_name,
-                base_url=base_url,
-                timeout_seconds=timeout_seconds,
-            )
+            content = active_backend.generate(prompt)
             if content:
                 return content
-            logger.error("Ollama returned empty response")
+            logger.error("LLM backend returned empty response")
             raise RuntimeError("empty summary")
 
         logger.info(
-            "Transcript length (%d words) exceeds chunk size (%d words). Processing in chunks...",
+            "Transcript length (%d words) exceeds chunk size (%d). Processing in chunks...",
             len(words),
             max_words_per_chunk,
         )
         chunks = split_transcript_smart(cleaned_transcript, max_words_per_chunk)
-
-        combined_sections: dict[str, list[str]] = {sec: [] for sec in config.sections}
-
-        for i, chunk in enumerate(chunks):
-            logger.info("Summarizing chunk %d/%d...", i + 1, len(chunks))
-            chunk_prompt = prompt_strategy.build_summary_prompt(
-                transcript=chunk,
-                language=lang_name,
-                is_video=is_video,
-            )
-            chunk_summary = _call_ollama_generate(
-                prompt=chunk_prompt,
-                model_name=model_name,
-                base_url=base_url,
-                timeout_seconds=timeout_seconds,
-            )
-            if chunk_summary:
-                chunk_sections = parse_summary_sections(chunk_summary, is_video=is_video)
-                for sec, items in chunk_sections.items():
-                    if sec in combined_sections:
-                        combined_sections[sec].extend(items)
-
-        logger.info("Consolidating section summaries...")
-        consolidated_summaries: dict[str, str] = {}
-        for sec, items in combined_sections.items():
-            if not items:
-                consolidated_summaries[sec] = format_empty_fallback(sec, config.primary_section)
-                continue
-
-            items_text = "\n".join(f"- {item}" for item in items)
-            prompt = prompt_strategy.build_consolidation_prompt(
-                category=sec,
-                items=items_text,
-                language=lang_name,
-            )
-
-            consolidated_content = _call_ollama_generate(
-                prompt=prompt,
-                model_name=model_name,
-                base_url=base_url,
-                timeout_seconds=timeout_seconds,
-            )
-
-            if not consolidated_content:
-                consolidated_content = format_empty_fallback(sec, config.primary_section)
-
-            consolidated_summaries[sec] = consolidated_content
-
-        final_parts = [f"## {sec}\n{consolidated_summaries[sec]}" for sec in config.sections]
-        return "\n\n".join(final_parts).strip()
+        combined_sections = _process_chunks(chunks, prompt_strategy, active_backend, lang_name, is_video, config)
+        return _consolidate_sections(combined_sections, prompt_strategy, active_backend, lang_name, config)
     finally:
-        unload_ollama_model(model_name=model_name, base_url=base_url)
+        active_backend.cleanup()

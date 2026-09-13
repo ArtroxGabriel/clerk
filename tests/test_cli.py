@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from unittest.mock import patch
+import pytest
 from typer.testing import CliRunner
 
 from clerk.cli import app, format_time_hhmmssmm
-
-
-import re
 
 runner = CliRunner()
 
@@ -208,6 +207,19 @@ def test_cli_gpu_disabled_in_cpu_mode(tmp_path: Path) -> None:
         result_device = runner.invoke(app, ["--target", str(input_file), "--whisper-device", "cuda"])
         assert result_device.exit_code == 1
         assert "--whisper-device cuda' was specified, but GPU execution is disabled or unavailable in CPU mode" in result_device.output
+
+
+def test_cli_warns_when_running_cpu_in_gpu_container(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    input_file = tmp_path / "sample.mp3"
+    input_file.write_text("mock audio content")
+    monkeypatch.setenv("ENABLE_GPU", "true")
+    mock_res_meta = {"timings": {}, "models": {}, "word_counts": {}}
+
+    with patch("clerk.cli.is_gpu_available", return_value=True), \
+         patch("clerk.cli.run_pipeline", return_value=(Path("out.srt"), Path("out.md"), mock_res_meta)):
+        result = runner.invoke(app, ["--target", str(input_file), "--preset", "cpu"])
+        assert result.exit_code == 0
+        assert "Warning: Running in CPU mode inside a GPU-enabled container" in result.output
 
 
 def test_cli_meeting_flag(tmp_path: Path) -> None:
