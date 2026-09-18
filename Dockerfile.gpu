@@ -63,7 +63,7 @@ COPY --from=builder /app/.venv /app/.venv
 
 # Put virtualenv binaries at the front of PATH
 ENV PATH="/app/.venv/bin:$PATH" \
-    LD_LIBRARY_PATH="/app/.venv/lib/python${PYTHON_VERSION}/site-packages/nvidia/cublas/lib:/app/.venv/lib/python${PYTHON_VERSION}/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH:-}" \
+    LD_LIBRARY_PATH="/app/.venv/lib/python3.14/site-packages/nvidia/cublas/lib:/app/.venv/lib/python3.14/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH:-}" \
     ENABLE_GPU=true \
     NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility
