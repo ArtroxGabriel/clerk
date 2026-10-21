@@ -71,6 +71,26 @@ def test_ollama_backend_generates_response_successfully(monkeypatch: pytest.Monk
     assert fake_client.posted_urls == ["/api/generate"]
     assert fake_client.posted_payloads[0]["model"] == "test-model"
     assert fake_client.posted_payloads[0]["prompt"] == "Meeting transcript"
+    assert fake_client.posted_payloads[0]["options"] == {
+        "num_ctx": 4096,
+        "temperature": 0.1,
+        "top_p": 0.9,
+        "repeat_penalty": 1.05,
+    }
+
+
+def test_ollama_backend_custom_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange
+    fake_client = FakeHttpClient([FakeHttpResponse(200, {"response": "Custom summary."})])
+    monkeypatch.setattr("httpx.Client", lambda *args, **kwargs: fake_client)
+    custom_opts = {"num_ctx": 8192, "temperature": 0.0}
+    backend = OllamaBackend(model_name="test-model", options=custom_opts)
+
+    # Act
+    backend.generate("Transcript")
+
+    # Assert
+    assert fake_client.posted_payloads[0]["options"] == custom_opts
 
 
 def test_ollama_backend_auto_pulls_missing_model_and_retries(monkeypatch: pytest.MonkeyPatch) -> None:
