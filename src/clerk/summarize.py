@@ -22,7 +22,7 @@ from .prompts import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MAX_WORDS_PER_CHUNK = 3000
+DEFAULT_MAX_WORDS_PER_CHUNK = 2000
 
 
 def split_transcript_smart(
@@ -140,7 +140,11 @@ def parse_summary_sections(summary: str, is_video: bool = False) -> dict[str, li
     sections: dict[str, list[str]] = {sec: [] for sec in config.sections}
     current_section: str | None = None
 
-    regex_pattern = r"^##\s*(" + "|".join(re.escape(sec) for sec in config.sections) + r")\b"
+    regex_pattern = (
+        r"^#{1,4}\s*(?:\*\*|__)?(?:\d+[\.\)]\s*)?("
+        + "|".join(re.escape(sec) for sec in config.sections)
+        + r")\b"
+    )
 
     for line in summary.splitlines():
         line_strip = line.strip()
@@ -266,7 +270,7 @@ def summarize_transcript(
 
     if not is_gpu_model:
         lower_m = model_name.lower()
-        if any(kw in lower_m for kw in ("llama3", "gpu", "cuda", "8b")):
+        if any(kw in lower_m for kw in ("llama3", "qwen", "gemma", "gpu", "cuda", "4b", "7b", "8b")):
             is_gpu_model = True
 
     prompt_strategy = PromptManager.get_strategy(

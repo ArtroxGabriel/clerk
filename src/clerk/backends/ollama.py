@@ -14,6 +14,13 @@ DEFAULT_TIMEOUT_SECONDS = 300.0
 UNLOAD_TIMEOUT_SECONDS = 10.0
 PULL_TIMEOUT_SECONDS = 600.0
 
+DEFAULT_OLLAMA_OPTIONS: dict[str, int | float] = {
+    "num_ctx": 6144,
+    "temperature": 0.1,
+    "top_p": 0.9,
+    "repeat_penalty": 1.05,
+}
+
 
 class OllamaBackend:
     """Inference backend communicating with a local Ollama daemon.
@@ -30,11 +37,13 @@ class OllamaBackend:
         base_url: str = DEFAULT_OLLAMA_BASE_URL,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         pull_timeout_seconds: float = PULL_TIMEOUT_SECONDS,
+        options: dict | None = None,
     ) -> None:
         self.model_name = model_name
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.pull_timeout_seconds = pull_timeout_seconds
+        self.options = options if options is not None else DEFAULT_OLLAMA_OPTIONS.copy()
         self._client: httpx.Client | None = None
 
     def _get_client(self) -> httpx.Client:
@@ -80,7 +89,13 @@ class OllamaBackend:
 
     def generate(self, prompt: str) -> str:
         """Generates text from prompt using Ollama."""
-        payload = {"model": self.model_name, "prompt": prompt, "stream": False}
+        payload = {
+            "model": self.model_name,
+            "prompt": prompt,
+            "stream": False,
+            "think": False,
+            "options": self.options,
+        }
         try:
             return self._execute_generate_post(self._get_client(), payload)
         except (httpx.ConnectError, httpx.ConnectTimeout) as err:

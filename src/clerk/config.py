@@ -30,14 +30,14 @@ PRESETS: dict[str, dict[str, str | int]] = {
         "whisper_device": "cuda",
         "whisper_compute_type": "float16",
         "whisper_batch_size": 4,
-        "llm_model": "llama3.1:8b",
+        "llm_model": "gemma4:e2b",
     },
     "accurate": {
         "whisper_model": "large-v3",
         "whisper_device": "cuda",
         "whisper_compute_type": "float16",
         "whisper_batch_size": 4,
-        "llm_model": "llama3.1:8b",
+        "llm_model": "gemma4:e2b",
     },
 }
 PRESETS["cuda"] = PRESETS["gpu"]

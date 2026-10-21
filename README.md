@@ -88,10 +88,10 @@ uv run clerk --target <path_or_youtube_url> [OPTIONS]
 
 | Shortcut | Preset (`-p`) | Whisper Model | Device | Compute Type | Default LLM |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| *(Default)* | `cpu` | `medium` | `cpu` | `int8` | `LiquidAI/lfm2.5-1.2b-instruct` |
+| *(Default)* | `cpu` | `large-v3-turbo` | `cpu` | `int8` | `LiquidAI/lfm2.5-1.2b-instruct` |
 | `--fast` | `fast` | `small` | `cpu` | `int8` | `LiquidAI/lfm2.5-1.2b-instruct` |
-| `--gpu` | `gpu` / `cuda` | `medium` | `cuda` | `float16` | `llama3.1:8b` |
-| — | `accurate` | `large-v3` | `cuda` | `float16` | `llama3.1:8b` |
+| `--gpu` | `gpu` / `cuda` | `large-v3-turbo` | `cuda` | `float16` | `gemma4:e2b` |
+| — | `accurate` | `large-v3` | `cuda` | `float16` | `gemma4:e2b` |
 
 > 💡 *GPU presets (`gpu`, `cuda`, `accurate`) and `--gpu` flags are automatically validated and disabled when running in CPU mode.*
 

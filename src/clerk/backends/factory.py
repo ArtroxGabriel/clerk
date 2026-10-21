@@ -12,6 +12,7 @@ def get_backend(
     model_name: str = DEFAULT_LLM_MODEL,
     base_url: str | None = None,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    options: dict | None = None,
 ) -> LLMBackend:
     """Creates and returns an LLMBackend instance matching backend_name.
 
@@ -27,6 +28,7 @@ def get_backend(
             model_name=model_name,
             base_url=target_base_url,
             timeout_seconds=timeout_seconds,
+            options=options,
         )
 
     raise ValueError(f"Unsupported backend: '{backend_name}'. Expected: 'ollama'")
