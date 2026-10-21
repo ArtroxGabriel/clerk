@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from clerk.summarize import (
+    DEFAULT_MAX_WORDS_PER_CHUNK,
     parse_summary_sections,
     split_transcript_by_words,
     summarize_transcript,
 )
+
+
+def test_default_max_words_per_chunk_is_3000() -> None:
+    assert DEFAULT_MAX_WORDS_PER_CHUNK == 3000
 
 
 def test_split_transcript_by_words() -> None:
@@ -128,9 +134,8 @@ def test_summarize_http_error() -> None:
     mock_client.post.return_value = mock_response
     mock_client.__enter__.return_value = mock_client
 
-    with patch("httpx.Client", return_value=mock_client):
-        with pytest.raises(RuntimeError, match="ollama request failed"):
-            summarize_transcript("Some transcript content")
+    with patch("httpx.Client", return_value=mock_client), pytest.raises(RuntimeError, match="ollama request failed"):
+        summarize_transcript("Some transcript content")
 
 
 def test_summarize_empty_response_from_ollama() -> None:
@@ -142,9 +147,8 @@ def test_summarize_empty_response_from_ollama() -> None:
     mock_client.post.return_value = mock_response
     mock_client.__enter__.return_value = mock_client
 
-    with patch("httpx.Client", return_value=mock_client):
-        with pytest.raises(RuntimeError, match="empty summary"):
-            summarize_transcript("Some transcript content")
+    with patch("httpx.Client", return_value=mock_client), pytest.raises(RuntimeError, match="empty summary"):
+        summarize_transcript("Some transcript content")
 
 
 def test_split_transcript_giant_line() -> None:
@@ -196,9 +200,8 @@ def test_summarize_connection_error() -> None:
     mock_client.post.side_effect = httpx.ConnectError("Connection refused")
     mock_client.__enter__.return_value = mock_client
 
-    with patch("httpx.Client", return_value=mock_client):
-        with pytest.raises(RuntimeError, match="Ensure Ollama is running"):
-            summarize_transcript("This is a valid meeting transcript with content")
+    with patch("httpx.Client", return_value=mock_client), pytest.raises(RuntimeError, match="Ensure Ollama is running"):
+        summarize_transcript("This is a valid meeting transcript with content")
 
 
 def test_summarize_auto_pull_offline_failure() -> None:
@@ -212,9 +215,8 @@ def test_summarize_auto_pull_offline_failure() -> None:
     mock_client.post.side_effect = [not_found_resp, httpx.ConnectError("Network unreachable")]
     mock_client.__enter__.return_value = mock_client
 
-    with patch("httpx.Client", return_value=mock_client):
-        with pytest.raises(RuntimeError, match="cannot be pulled while offline"):
-            summarize_transcript("This is a valid meeting transcript with content")
+    with patch("httpx.Client", return_value=mock_client), pytest.raises(RuntimeError, match="cannot be pulled while offline"):
+        summarize_transcript("This is a valid meeting transcript with content")
 
 
 class FakeLLMBackend:

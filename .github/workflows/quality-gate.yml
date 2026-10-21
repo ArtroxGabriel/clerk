@@ -1,0 +1,45 @@
+name: Quality Gate
+
+on:
+  workflow_call:
+  push:
+    branches-ignore: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  quality-gate:
+    name: Code Quality & Unit Tests (>=85% cov)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install dependencies
+        run: uv sync --all-groups --frozen
+
+      - name: Linting (Ruff)
+        run: uv run ruff check
+
+      - name: Type Checking (Pyrefly)
+        run: uv run pyrefly check
+
+      - name: Unit Tests & Coverage Gate (>=85%)
+        env:
+          NO_COLOR: "1"
+        run: uv run clerk-test

@@ -14,18 +14,7 @@ on:
       - "docker-compose*.yaml"
       - ".dockerignore"
       - ".github/workflows/ci.yml"
-  pull_request:
-    branches: [ "main", "master" ]
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "pyproject.toml"
-      - "uv.lock"
-      - ".python-version"
-      - "Dockerfile*"
-      - "docker-compose*.yaml"
-      - ".dockerignore"
-      - ".github/workflows/ci.yml"
+      - ".github/workflows/quality-gate.yml"
   workflow_dispatch:
 
 env:
@@ -34,40 +23,8 @@ env:
 
 jobs:
   checks:
-    name: Code Quality & Unit Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version-file: ".python-version"
-
-      - name: Install dependencies
-        run: uv sync --frozen
-
-      - name: Linting (Ruff)
-        run: uv run ruff check
-
-      - name: Type Checking (Pyrefly)
-        run: uv run pyrefly check
-
-      - name: Unit Tests (Pytest)
-        env:
-          NO_COLOR: "1"
-        run: uv run clerk-test
+    name: Quality Gate
+    uses: ./.github/workflows/quality-gate.yml
 
   build-and-push:
     name: Build & Push (${{ matrix.image-type }})

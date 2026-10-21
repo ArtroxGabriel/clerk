@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import re
+from dataclasses import dataclass
 
 from .backends import (
     DEFAULT_LLM_MODEL,
@@ -22,7 +22,7 @@ from .prompts import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MAX_WORDS_PER_CHUNK = 2000
+DEFAULT_MAX_WORDS_PER_CHUNK = 3000
 
 
 def split_transcript_smart(
@@ -151,7 +151,7 @@ def parse_summary_sections(summary: str, is_video: bool = False) -> dict[str, li
 
         if header_match:
             matched_name = header_match.group(1).lower()
-            for key in sections.keys():
+            for key in sections:
                 if key.lower() == matched_name:
                     current_section = key
                     break

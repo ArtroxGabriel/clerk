@@ -27,12 +27,16 @@ class FakeHttpClient:
         self._responses = list(responses)
         self.posted_payloads: list[dict] = []
         self.posted_urls: list[str] = []
+        self.closed: bool = False
 
     def __enter__(self) -> FakeHttpClient:
         return self
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
-        pass
+        self.closed = True
+
+    def close(self) -> None:
+        self.closed = True
 
     def post(self, url: str, json: dict | None = None, timeout: float | None = None) -> FakeHttpResponse:
         self.posted_urls.append(url)
@@ -96,7 +100,7 @@ def test_ollama_backend_raises_clear_error_when_server_unreachable(monkeypatch: 
     backend = OllamaBackend(model_name="test-model", base_url="http://127.0.0.1:11434")
 
     # Act & Assert
-    with pytest.raises(RuntimeError, match="Could not connect to local Ollama server at http://127.0.0.1:11434"):
+    with pytest.raises(RuntimeError, match=r"Could not connect to local Ollama server at http://127\.0\.0\.1:11434"):
         backend.generate("Meeting transcript")
 
 
@@ -138,3 +142,31 @@ def test_get_backend_factory_raises_error_for_unsupported_backend() -> None:
     # Arrange & Act & Assert
     with pytest.raises(ValueError, match="Unsupported backend: 'unsupported'"):
         get_backend("unsupported")
+
+
+def test_ollama_backend_reuses_http_client_across_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange
+    created_clients: list[FakeHttpClient] = []
+
+    def make_client(*args: object, **kwargs: object) -> FakeHttpClient:
+        client = FakeHttpClient([
+            FakeHttpResponse(200, {"response": "First chunk"}),
+            FakeHttpResponse(200, {"response": "Second chunk"}),
+            FakeHttpResponse(200, {}),
+        ])
+        created_clients.append(client)
+        return client
+
+    monkeypatch.setattr("httpx.Client", make_client)
+    backend = OllamaBackend(model_name="test-model", base_url="http://127.0.0.1:11434")
+
+    # Act
+    out1 = backend.generate("Chunk 1")
+    out2 = backend.generate("Chunk 2")
+    backend.cleanup()
+
+    # Assert
+    assert out1 == "First chunk"
+    assert out2 == "Second chunk"
+    assert len(created_clients) == 1
+    assert created_clients[0].closed is True

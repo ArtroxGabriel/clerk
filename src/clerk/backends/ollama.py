@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+
 import httpx
 
 from clerk.prompts import clean_llm_output
@@ -34,6 +35,12 @@ class OllamaBackend:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.pull_timeout_seconds = pull_timeout_seconds
+        self._client: httpx.Client | None = None
+
+    def _get_client(self) -> httpx.Client:
+        if self._client is None:
+            self._client = httpx.Client(base_url=self.base_url, timeout=self.timeout_seconds)
+        return self._client
 
     def _attempt_auto_pull(self, client: httpx.Client) -> None:
         """Pulls missing model from Ollama library."""
@@ -75,8 +82,7 @@ class OllamaBackend:
         """Generates text from prompt using Ollama."""
         payload = {"model": self.model_name, "prompt": prompt, "stream": False}
         try:
-            with httpx.Client(base_url=self.base_url, timeout=self.timeout_seconds) as client:
-                return self._execute_generate_post(client, payload)
+            return self._execute_generate_post(self._get_client(), payload)
         except (httpx.ConnectError, httpx.ConnectTimeout) as err:
             logger.error("Could not connect to Ollama at %s: %s", self.base_url, err)
             raise RuntimeError(
@@ -85,11 +91,15 @@ class OllamaBackend:
             ) from err
 
     def cleanup(self) -> None:
-        """Unloads model from Ollama memory via keep_alive: 0."""
+        """Unloads model from Ollama memory via keep_alive: 0 and closes HTTP client."""
         payload = {"model": self.model_name, "keep_alive": 0}
         try:
-            with httpx.Client(base_url=self.base_url, timeout=UNLOAD_TIMEOUT_SECONDS) as client:
-                client.post("/api/generate", json=payload)
+            client = self._get_client()
+            client.post("/api/generate", json=payload, timeout=UNLOAD_TIMEOUT_SECONDS)
             logger.info("Unloaded Ollama model '%s' from memory", self.model_name)
         except Exception as err:
             logger.warning("Failed to unload Ollama model '%s': %s", self.model_name, err)
+        finally:
+            if self._client is not None:
+                self._client.close()
+                self._client = None
