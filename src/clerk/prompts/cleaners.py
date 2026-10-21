@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-
 NOISE_PATTERNS = re.compile(
     r"^(\s*(\[\s*(music|música|applause|cheering|laughter|noise|silence|audio|ruído)\s*\]|\(\s*(music|música|applause|cheering|laughter|noise|silence|audio|ruído)\s*\)|subtitles by|legendas por|obrigado por assistir|thanks for watching|\.+|\?+|,+)\s*)+$",
     re.IGNORECASE,
@@ -58,8 +57,5 @@ def is_meaningful_transcript(transcript: str, min_words: int = DEFAULT_MIN_TRANS
     if len(words) < min_words:
         return False
 
-    unique_words = set(w.lower() for w in words)
-    if len(words) >= min_words and len(unique_words) <= 1:
-        return False
-
-    return True
+    unique_words = {w.lower() for w in words}
+    return not (len(words) >= min_words and len(unique_words) <= 1)

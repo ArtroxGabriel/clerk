@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
 
 from .audio import extract_audio
 from .prompts import clean_srt_for_prompt
 from .summarize import summarize_transcript
 from .transcribe import transcribe_file
-
-import time
 
 logger = logging.getLogger(__name__)
 

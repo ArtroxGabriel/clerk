@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import gc
 import logging
+import os
+import tempfile
 from pathlib import Path
 
 from faster_whisper import BatchedInferencePipeline, WhisperModel
-
-import os
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ def _resolve_download_root() -> str | None:
         test_file.unlink()
         return None
     except (PermissionError, OSError) as e:
-        fallback = Path("/tmp/huggingface_cache")
+        fallback = Path(tempfile.gettempdir()) / "huggingface_cache"
         fallback.mkdir(parents=True, exist_ok=True)
         logger.warning(
             "Cache directory '%s' is not writable (%s). Falling back to '%s'",
@@ -96,25 +97,31 @@ def transcribe_file(
     batched_model = BatchedInferencePipeline(model=model)
 
     whisper_language = None if (language and language.lower() == "auto") else language
-    segments, info = batched_model.transcribe(
-        str(audio_path),
-        language=whisper_language,
-        vad_filter=True,
-        word_timestamps=False,
-        batch_size=batch_size,
-        log_progress=log_progress,
-    )
+    try:
+        segments, info = batched_model.transcribe(
+            str(audio_path),
+            language=whisper_language,
+            vad_filter=True,
+            word_timestamps=False,
+            batch_size=batch_size,
+            log_progress=log_progress,
+        )
 
-    # Convert generator to list to iterate for both SRT and plain text
-    segments_list = list(segments)
-    plain_text, srt_text = segments_to_srt(segments_list)
+        # Convert generator to list to iterate for both SRT and plain text
+        segments_list = list(segments)
+        plain_text, srt_text = segments_to_srt(segments_list)
 
-    metadata = {
-        "language": info.language,
-        "language_probability": info.language_probability,
-        "duration": info.duration,
-        "duration_after_vad": info.duration_after_vad,
-    }
+        metadata = {
+            "language": info.language,
+            "language_probability": info.language_probability,
+            "duration": info.duration,
+            "duration_after_vad": info.duration_after_vad,
+        }
+    finally:
+        # Release CTranslate2 model from VRAM before LLM stage runs on 6GB GPUs
+        del batched_model
+        del model
+        gc.collect()
 
     if plain_text:
         return plain_text, srt_text, metadata

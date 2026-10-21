@@ -9,7 +9,6 @@ import pytest
 from clerk.pipeline import run_pipeline
 
 
-
 def test_run_pipeline(tmp_path: Path) -> None:
     input_path = tmp_path / "input.mp3"
     input_path.write_text("audio contents")
@@ -78,7 +77,7 @@ def test_run_pipeline_video_mode(tmp_path: Path) -> None:
          patch("clerk.pipeline.transcribe_file", return_value=("Video text", mock_srt, mock_metadata)), \
          patch("clerk.pipeline.summarize_transcript", return_value="Video summary"):
 
-        tx_path, sum_path, metadata_res = run_pipeline(
+        tx_path, sum_path, _metadata_res = run_pipeline(
             input_path=input_path,
             output_dir=output_dir,
             whisper_model="tiny",
@@ -173,7 +172,7 @@ def test_run_pipeline_summarize_only_media_file(tmp_path: Path) -> None:
          patch("clerk.pipeline.transcribe_file") as mock_transcribe, \
          patch("clerk.pipeline.summarize_transcript", return_value="Video Summary") as mock_summarize:
 
-        tx_path, sum_path, metadata_res = run_pipeline(
+        tx_path, sum_path, _metadata_res = run_pipeline(
             input_path=video_path,
             output_dir=output_dir,
             whisper_model="tiny",
@@ -340,7 +339,7 @@ def test_run_pipeline_resume_with_existing_summary(tmp_path: Path) -> None:
          patch("clerk.pipeline.transcribe_file") as mock_transcribe, \
          patch("clerk.pipeline.summarize_transcript") as mock_summarize:
 
-        tx_path, res_sum_path, _ = run_pipeline(
+        _tx_path, res_sum_path, _ = run_pipeline(
             input_path=input_path,
             output_dir=output_dir,
             whisper_model="tiny",
@@ -370,7 +369,7 @@ def test_run_pipeline_auto_language_alignment(tmp_path: Path) -> None:
          patch("clerk.pipeline.transcribe_file", return_value=("Hello English talk", mock_srt, mock_metadata)), \
          patch("clerk.pipeline.summarize_transcript", return_value="English summary") as mock_summarize:
 
-        tx_path, sum_path, metadata_res = run_pipeline(
+        _tx_path, _sum_path, metadata_res = run_pipeline(
             input_path=input_path,
             output_dir=output_dir,
             whisper_model="tiny",

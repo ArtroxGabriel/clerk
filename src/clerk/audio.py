@@ -4,9 +4,9 @@ import logging
 import re
 import shutil
 import subprocess
-from pathlib import Path
-
+import tempfile
 import uuid
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +37,55 @@ def extract_youtube_id(url: str) -> str | None:
     return match.group(1) if match else None
 
 
+def download_youtube_subtitles(url: str, language: str = "pt") -> Path | None:
+    """Attempts to download embedded or auto-generated YouTube subtitles (.srt) via yt-dlp.
+
+    Returns the path to the downloaded .srt file in the system temp dir, or None if unavailable.
+    """
+    ensure_yt_dlp()
+    work_dir = Path(tempfile.mkdtemp(prefix="clerk_subs_"))
+    lang_code = "pt" if not language or language.lower() == "auto" else language.lower()
+    sub_langs = f"{lang_code}.*,{lang_code},en.*,en" if lang_code != "en" else "en.*,en"
+
+    command = [
+        "yt-dlp",
+        "--write-subs",
+        "--write-auto-subs",
+        "--sub-langs",
+        sub_langs,
+        "--sub-format",
+        "srt",
+        "--convert-subs",
+        "srt",
+        "--skip-download",
+        "--restrict-filenames",
+        "-o",
+        str(work_dir / "yt_%(title)s.%(ext)s"),
+        url,
+    ]
+
+    try:
+        logger.info("Checking for existing YouTube subtitles (%s)...", lang_code)
+        subprocess.run(command, capture_output=True, text=True, check=False)
+        srt_files = sorted(work_dir.glob("*.srt"))
+        for srt_file in srt_files:
+            if srt_file.stat().st_size > 0:
+                base_stem = re.sub(r"\.[a-zA-Z0-9_-]+$", "", srt_file.stem)
+                dest_path = Path(tempfile.gettempdir()) / f"{base_stem}_transcript.srt"
+                shutil.move(str(srt_file), str(dest_path))
+                logger.info("Downloaded YouTube subtitles to %s", dest_path)
+                return dest_path
+        return None
+    except Exception as err:
+        logger.debug("Subtitle fast-path unavailable: %s", err)
+        return None
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
 def download_youtube_audio(url: str) -> Path:
     ensure_yt_dlp()
-    temp_dir = Path("/tmp")
+    temp_dir = Path(tempfile.gettempdir())
     yt_id = extract_youtube_id(url)
     default_filename = f"yt_{yt_id}" if yt_id else f"yt_{uuid.uuid4().hex[:8]}"
 

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from clerk.transcribe import (
     format_timestamp,
@@ -119,10 +120,12 @@ def test_transcribe_empty_transcript(tmp_path: Path) -> None:
     mock_batched_instance = MagicMock()
     mock_batched_instance.transcribe.return_value = (mock_segments, mock_info)
 
-    with patch("clerk.transcribe.WhisperModel", return_value=mock_model_instance), \
-         patch("clerk.transcribe.BatchedInferencePipeline", return_value=mock_batched_instance):
-        with pytest.raises(RuntimeError, match="empty transcript"):
-            transcribe_file(audio_path)
+    with (
+        patch("clerk.transcribe.WhisperModel", return_value=mock_model_instance),
+        patch("clerk.transcribe.BatchedInferencePipeline", return_value=mock_batched_instance),
+        pytest.raises(RuntimeError, match="empty transcript"),
+    ):
+        transcribe_file(audio_path)
 
 
 def test_transcribe_gpu_int8_mapping(tmp_path: Path) -> None:
@@ -161,11 +164,15 @@ def test_resolve_download_root_fallback(monkeypatch: pytest.MonkeyPatch, tmp_pat
     unwritable_dir = tmp_path / "unwritable_hf_cache"
     unwritable_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("HF_HOME", str(unwritable_dir))
+    custom_tmp = tmp_path / "custom_temp"
 
-    # Mock touch to raise PermissionError
-    with patch("pathlib.Path.touch", side_effect=PermissionError("Permission denied")):
+    # Mock touch to raise PermissionError and verify tempfile.gettempdir() is used
+    with (
+        patch("pathlib.Path.touch", side_effect=PermissionError("Permission denied")),
+        patch("clerk.transcribe.tempfile.gettempdir", return_value=str(custom_tmp)),
+    ):
         fallback = _resolve_download_root()
-        assert fallback == "/tmp/huggingface_cache"
+        assert fallback == str(custom_tmp / "huggingface_cache")
 
 
 def test_transcribe_auto_language(tmp_path: Path) -> None:
@@ -181,10 +188,30 @@ def test_transcribe_auto_language(tmp_path: Path) -> None:
 
     with patch("clerk.transcribe.WhisperModel", return_value=mock_model_instance), \
          patch("clerk.transcribe.BatchedInferencePipeline", return_value=mock_batched_instance):
-        plain_text, srt_text, metadata = transcribe_file(audio_path, language="auto")
+        _plain_text, _srt_text, metadata = transcribe_file(audio_path, language="auto")
         assert metadata["language"] == "es"
         # Language should have been passed as None to Whisper transcribe call
         mock_batched_instance.transcribe.assert_called_once()
         assert mock_batched_instance.transcribe.call_args[1]["language"] is None
+
+
+def test_transcribe_releases_vram_via_gc_collect(tmp_path: Path) -> None:
+    # Arrange
+    audio_path = tmp_path / "audio.wav"
+    audio_path.write_text("audio raw data")
+    mock_segment = MagicMock(start=0.0, end=1.0, text="VRAM release test.")
+    mock_info = MagicMock(language="pt", language_probability=0.99, duration=1.0, duration_after_vad=1.0)
+    mock_model_instance = MagicMock()
+    mock_batched_instance = MagicMock()
+    mock_batched_instance.transcribe.return_value = ([mock_segment], mock_info)
+
+    # Act & Assert
+    with (
+        patch("clerk.transcribe.WhisperModel", return_value=mock_model_instance),
+        patch("clerk.transcribe.BatchedInferencePipeline", return_value=mock_batched_instance),
+        patch("clerk.transcribe.gc.collect") as mock_gc,
+    ):
+        transcribe_file(audio_path, device="cuda")
+        mock_gc.assert_called_once()
 
 

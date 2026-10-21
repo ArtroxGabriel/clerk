@@ -4,15 +4,15 @@
 
 ### Key Capabilities & Features
 
-- **Input Sources**: Supports local media files (`.mp4`, `.mp3`, `.wav`, etc.) and YouTube URLs (downloaded via `yt-dlp` using human-readable video titles).
+- **Input Sources**: Supports local media files (`.mp4`, `.mp3`, `.wav`, etc.) and YouTube URLs (uses `yt-dlp` subtitle fast-path when available, falling back to audio download with human-readable video titles).
 - **Audio Normalization**: Normalizes inputs to 16kHz, mono WAV format using `ffmpeg`.
-- **Speech-to-Text (STT)**: Transcribes audio using `faster-whisper` (`BatchedInferencePipeline`) with progress bar logging, VAD filtering, and configurable batch sizes. Outputs both raw `.txt` and timestamped `.srt` files.
-- **LLM Summarization**: Interfaces with a local Ollama instance (`http://127.0.0.1:11434`) to produce structured Portuguese markdown summaries (`## Pontos principais`, `## Decisões`, `## Ações`, `## Pendências` or video equivalents).
+- **Speech-to-Text (STT)**: Transcribes audio using `faster-whisper` (`BatchedInferencePipeline`, defaulting to `large-v3-turbo`) with progress bar logging, VAD filtering, configurable batch sizes, and explicit VRAM cleanup (`gc.collect()`). Outputs both raw `.txt` and timestamped `.srt` files.
+- **LLM Summarization**: Interfaces with a local Ollama instance (`http://127.0.0.1:11434`) via reusable HTTP connections to produce structured Portuguese markdown summaries (`## Pontos principais`, `## Decisões`, `## Ações`, `## Pendências` or video equivalents).
 - **CPU vs GPU Strategy**: Features dedicated prompt strategies (`CpuPromptStrategy` for models like `LiquidAI/lfm2.5-1.2b-instruct`, `GpuPromptStrategy` for models like `llama3.1:8b`, and `CustomPromptStrategy` for custom templates).
 - **Custom Prompt Overrides**: Supports overriding stage 1 summary/chunk prompts (`--prompt` or `--prompt-file`) and stage 2 consolidation prompts (`--consolidation-prompt` or `--consolidation-prompt-file`) with `{transcript}`, `{category}`, `{items}`, and `{language}` placeholder substitution.
 - **Isolated Step Execution & Resuming**: Supports running only transcription (`--transcribe-only`), only summarization (`--summarize-only` or passing `.srt` targets directly), and resuming previous pipeline progress with `--resume` / `-r` (or forcing regeneration with `--force` / `-f`).
 - **Immediate Step File Persistence**: Saves `.wav`, `.srt`, and interim metadata files to disk immediately after each step completes rather than waiting for pipeline completion, ensuring zero data loss if downstream steps fail.
-- **Smart Sentence Chunking**: Automatically breaks long transcripts (> 2000 words) at sentence and clause boundaries to prevent splitting in the middle of sentences or words.
+- **Smart Sentence Chunking**: Automatically breaks long transcripts (> 3000 words) at sentence and clause boundaries to prevent splitting in the middle of sentences or words.
 - **Security & Prompt Injection Protection**: Strips SRT timestamps and wraps prompts in `<<<TRANSCRIPT>>>` and `<<<ITEMS>>>` delimiters. Automatically sanitizes all `<<<...>>>` delimiter tags from final LLM responses (`clean_llm_output`).
 - **Guard Rails & Model Recovery**: Short-circuits empty, garbled, or noise-only transcripts before making LLM calls (`is_meaningful_transcript`). Provides an interactive CLI recovery menu on pipeline/model errors to change LLM models, Whisper models, compute types, or target devices on the fly, automatically resuming from existing intermediate files without re-downloading media or re-transcribing.
 
@@ -20,13 +20,20 @@
 
 ```text
 clerk/
+├── .github/workflows/ci.yml    # GitHub Actions CI quality gate (Ruff, Pyrefly, Pytest >=85% cov)
 ├── AGENTS.md                   # Canonical AI agent instructions, project overview & rules
 ├── pyproject.toml              # Project configuration, dependencies, CLI entrypoint & scripts
 ├── src/
 │   └── clerk/
 │       ├── __init__.py         # Package initialization & version metadata
-│       ├── audio.py            # FFmpeg audio normalization & yt-dlp YouTube audio download
-│       ├── cli.py              # Typer CLI application, upfront option validation & recovery menu
+│       ├── audio.py            # FFmpeg audio normalization & yt-dlp YouTube subtitle/audio download
+│       ├── backends/           # LLM inference backends subpackage
+│       │   ├── __init__.py     # Package re-exports
+│       │   ├── base.py         # LLMBackend protocol definition
+│       │   ├── factory.py      # Backend factory (get_backend)
+│       │   └── ollama.py       # OllamaBackend with persistent httpx.Client & auto-pull
+│       ├── cli.py              # Typer CLI application, status display & recovery menu
+│       ├── config.py           # Presets, GPU detection & CLI option validation (ResolvedConfig)
 │       ├── pipeline.py         # End-to-end pipeline coordinator & isolated step handlers
 │       ├── prompts/            # Prompts subpackage
 │       │   ├── __init__.py     # Package re-exports
@@ -35,15 +42,16 @@ clerk/
 │       │   ├── cpu.py          # CpuPromptStrategy (compact rules for CPU models)
 │       │   ├── gpu.py          # GpuPromptStrategy (expressive guidelines for GPU models)
 │       │   └── custom.py       # CustomPromptStrategy (template substitution & fallback)
-│       ├── summarize.py        # Ollama API integration, section parsing & smart transcript chunking
+│       ├── summarize.py        # Summarization coordinator, section parsing & smart transcript chunking
 │       └── transcribe.py       # faster-whisper BatchedInferencePipeline speech-to-text engine
 └── tests/
-    ├── test_audio.py           # Tests for audio extraction, yt-dlp downloads & YouTube ID regex
-    ├── test_cli.py             # Tests for CLI flags, presets, option validation & time formatting
+    ├── test_audio.py           # Tests for audio extraction, yt-dlp subtitles/audio & YouTube ID regex
+    ├── test_backends.py        # Tests for OllamaBackend, HTTP client reuse & backend factory
+    ├── test_cli.py             # Tests for CLI flags, positional target, presets & recovery loop
     ├── test_pipeline.py        # Integration tests for end-to-end pipeline & step execution
     ├── test_prompts.py         # Tests for prompt strategy generation, noise detection & custom templates
     ├── test_summarize.py       # Tests for transcript chunking, Ollama calls & empty short-circuiting
-    └── test_transcribe.py      # Tests for Whisper STT transcription, batch size & SRT formatting
+    └── test_transcribe.py      # Tests for Whisper STT transcription, VRAM cleanup & SRT formatting
 ```
 
 ### Module Descriptions

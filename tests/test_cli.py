@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
+from pathlib import Path
 from unittest.mock import patch
+
 import pytest
 from typer.testing import CliRunner
 
@@ -102,13 +103,63 @@ def test_cli_success_youtube_url(tmp_path: Path) -> None:
     yt_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
     mock_res_meta = {"timings": {}, "models": {}, "word_counts": {}}
 
-    with patch("clerk.cli.download_youtube_audio", return_value=mock_temp_file) as mock_dl, \
-         patch("clerk.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)):
+    with (
+        patch("clerk.cli.download_youtube_subtitles", return_value=None) as mock_subs,
+        patch("clerk.cli.download_youtube_audio", return_value=mock_temp_file) as mock_dl,
+        patch("clerk.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)),
+    ):
         result = runner.invoke(app, ["--target", yt_url])
         assert result.exit_code == 0
+        mock_subs.assert_called_once_with(yt_url, language="pt")
         mock_dl.assert_called_once_with(yt_url)
         # Temp file should be deleted in finally block
         assert not mock_temp_file.exists()
+
+
+def test_cli_youtube_url_uses_subtitle_fast_path(tmp_path: Path) -> None:
+    # Arrange
+    sub_file = tmp_path / "yt_Fast_Video_transcript.srt"
+    sub_file.write_text("1\n00:00:00,000 --> 00:00:02,000\nFast subtitle text\n", encoding="utf-8")
+    output_dir = tmp_path / "output"
+    yt_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    mock_res_meta = {"timings": {}, "models": {"whisper_model": "skipped"}, "word_counts": {}}
+
+    # Act
+    with (
+        patch("clerk.cli.download_youtube_subtitles", return_value=sub_file) as mock_subs,
+        patch("clerk.cli.download_youtube_audio") as mock_dl,
+        patch("clerk.cli.run_pipeline", return_value=(output_dir / "yt_Fast_Video_transcript.srt", output_dir / "yt_Fast_Video_resume.md", mock_res_meta)) as mock_run,
+    ):
+        result = runner.invoke(app, [yt_url, "--output-dir", str(output_dir)])
+
+    # Assert
+    assert result.exit_code == 0
+    mock_subs.assert_called_once_with(yt_url, language="pt")
+    mock_dl.assert_not_called()
+    assert mock_run.call_args[1]["summarize_only"] is True
+    assert (output_dir / "yt_Fast_Video_transcript.srt").exists()
+    assert not sub_file.exists()
+
+
+def test_cli_youtube_url_force_skips_subtitle_fast_path(tmp_path: Path) -> None:
+    # Arrange
+    mock_temp_file = tmp_path / "yt_download.wav"
+    mock_temp_file.write_text("yt audio")
+    yt_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    mock_res_meta = {"timings": {}, "models": {}, "word_counts": {}}
+
+    # Act
+    with (
+        patch("clerk.cli.download_youtube_subtitles") as mock_subs,
+        patch("clerk.cli.download_youtube_audio", return_value=mock_temp_file) as mock_dl,
+        patch("clerk.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/resume.md"), mock_res_meta)),
+    ):
+        result = runner.invoke(app, [yt_url, "--force"])
+
+    # Assert
+    assert result.exit_code == 0
+    mock_subs.assert_not_called()
+    mock_dl.assert_called_once_with(yt_url)
 
 
 def test_cli_keyboard_interrupt(tmp_path: Path) -> None:
@@ -133,12 +184,12 @@ def test_cli_gpu_flag(tmp_path: Path) -> None:
         mock_run.assert_called_once_with(
             input_path=input_file,
             output_dir=Path("output"),
-            whisper_model="large-v3",
+            whisper_model="large-v3-turbo",
             whisper_device="cuda",
             whisper_compute_type="float16",
             llm_model="llama3.1:8b",
             language="pt",
-            whisper_batch_size=8,
+            whisper_batch_size=4,
             is_video=False,
             verbose=False,
             transcribe_only=False,
@@ -147,6 +198,22 @@ def test_cli_gpu_flag(tmp_path: Path) -> None:
             custom_consolidation_prompt=None,
             resume=False,
         )
+
+
+def test_cli_default_cpu_preset_uses_turbo(tmp_path: Path) -> None:
+    # Arrange
+    input_file = tmp_path / "sample.mp3"
+    input_file.write_text("mock audio content")
+    mock_res_meta = {"timings": {}, "models": {}, "word_counts": {}}
+
+    # Act
+    with patch("clerk.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)) as mock_run:
+        result = runner.invoke(app, ["--target", str(input_file)])
+
+    # Assert
+    assert result.exit_code == 0
+    assert mock_run.call_args[1]["whisper_model"] == "large-v3-turbo"
+    assert mock_run.call_args[1]["whisper_device"] == "cpu"
 
 
 def test_cli_preset_override(tmp_path: Path) -> None:
@@ -350,7 +417,7 @@ def test_prompt_pipeline_recovery_interactive() -> None:
     from clerk.cli import _prompt_pipeline_recovery
 
     with patch("sys.stdin.isatty", return_value=False):
-        llm, whisper, compute, dev, retry = _prompt_pipeline_recovery(
+        llm, _whisper, _compute, _dev, retry = _prompt_pipeline_recovery(
             RuntimeError("test error"), "llm1", "whisper1", "int8", "cpu"
         )
         assert retry is False
@@ -427,6 +494,21 @@ def test_cli_verbose_configuration_output(tmp_path: Path) -> None:
         assert "Target:" in clean_out
         assert "Resume: True" in clean_out
         assert "Force: False" in clean_out
+
+
+def test_cli_positional_target_argument(tmp_path: Path) -> None:
+    # Arrange
+    input_file = tmp_path / "sample.mp3"
+    input_file.write_text("mock audio content")
+    mock_res_meta = {"timings": {}, "models": {}, "word_counts": {}}
+
+    # Act
+    with patch("clerk.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)) as mock_run:
+        result = runner.invoke(app, [str(input_file)])
+
+    # Assert
+    assert result.exit_code == 0
+    assert mock_run.call_args[1]["input_path"] == input_file
 
 
 def test_cli_recovery_retries_with_resume(tmp_path: Path) -> None:
