@@ -71,8 +71,9 @@ def test_ollama_backend_generates_response_successfully(monkeypatch: pytest.Monk
     assert fake_client.posted_urls == ["/api/generate"]
     assert fake_client.posted_payloads[0]["model"] == "test-model"
     assert fake_client.posted_payloads[0]["prompt"] == "Meeting transcript"
+    assert fake_client.posted_payloads[0]["think"] is False
     assert fake_client.posted_payloads[0]["options"] == {
-        "num_ctx": 4096,
+        "num_ctx": 6144,
         "temperature": 0.1,
         "top_p": 0.9,
         "repeat_penalty": 1.05,

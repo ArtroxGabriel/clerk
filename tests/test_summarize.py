@@ -12,8 +12,30 @@ from clerk.summarize import (
 )
 
 
-def test_default_max_words_per_chunk_is_3000() -> None:
-    assert DEFAULT_MAX_WORDS_PER_CHUNK == 3000
+def test_default_max_words_per_chunk_is_2000() -> None:
+    assert DEFAULT_MAX_WORDS_PER_CHUNK == 2000
+
+
+def test_parse_summary_sections_handles_markdown_bold_and_colons() -> None:
+    # Arrange
+    summary_text = """
+## **Resumo geral:**
+- O inimigo percebido é o Estado.
+### 1. Principais tópicos
+* Queda nas periferias.
+## Momentos importantes:
+- Vitória por 32 votos.
+## Conclusões ou mensagens finais
+* Perda de diálogo.
+"""
+    # Act
+    sections = parse_summary_sections(summary_text, is_video=True)
+
+    # Assert
+    assert sections["Resumo geral"] == ["O inimigo percebido é o Estado."]
+    assert sections["Principais tópicos"] == ["Queda nas periferias."]
+    assert sections["Momentos importantes"] == ["Vitória por 32 votos."]
+    assert sections["Conclusões ou mensagens finais"] == ["Perda de diálogo."]
 
 
 def test_split_transcript_by_words() -> None:

@@ -15,7 +15,7 @@ UNLOAD_TIMEOUT_SECONDS = 10.0
 PULL_TIMEOUT_SECONDS = 600.0
 
 DEFAULT_OLLAMA_OPTIONS: dict[str, int | float] = {
-    "num_ctx": 4096,
+    "num_ctx": 6144,
     "temperature": 0.1,
     "top_p": 0.9,
     "repeat_penalty": 1.05,
@@ -93,6 +93,7 @@ class OllamaBackend:
             "model": self.model_name,
             "prompt": prompt,
             "stream": False,
+            "think": False,
             "options": self.options,
         }
         try:

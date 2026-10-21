@@ -74,6 +74,8 @@ def test_prompt_manager_and_strategies() -> None:
     assert "content strategist" in video_prompt_gpu
     assert "<<<TRANSCRIPT>>>" in video_prompt_gpu
     assert "<<<END TRANSCRIPT>>>" in video_prompt_gpu
+    assert video_prompt_gpu.index("<<<END TRANSCRIPT>>>") < video_prompt_gpu.index("OUTPUT FORMAT:")
+    assert meeting_prompt_cpu.index("<<<END TRANSCRIPT>>>") < meeting_prompt_cpu.index("OUTPUT FORMAT:")
 
 
 def test_custom_prompt_strategy() -> None:
