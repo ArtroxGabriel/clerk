@@ -65,9 +65,18 @@ def test_prompt_manager_and_strategies() -> None:
     assert isinstance(gpu_strat, GpuPromptStrategy)
 
     meeting_prompt_cpu = cpu_strat.build_summary_prompt("test transcript", "Portuguese", is_video=False)
-    assert "## Pontos principais" in meeting_prompt_cpu
+    assert "## Contexto" in meeting_prompt_cpu
+    assert "## Pauta e discussões" in meeting_prompt_cpu
+    assert "## Decisões" in meeting_prompt_cpu
+    assert "## Encaminhamentos" in meeting_prompt_cpu
+    assert "## Pendências" in meeting_prompt_cpu
     assert "<<<TRANSCRIPT>>>" in meeting_prompt_cpu
     assert "<<<END TRANSCRIPT>>>" in meeting_prompt_cpu
+
+    meeting_prompt_gpu = gpu_strat.build_summary_prompt("test transcript", "Portuguese", is_video=False)
+    assert "## Contexto" in meeting_prompt_gpu
+    assert "## Pauta e discussões" in meeting_prompt_gpu
+    assert "## Encaminhamentos" in meeting_prompt_gpu
 
     video_prompt_gpu = gpu_strat.build_summary_prompt("test transcript", "English", is_video=True)
     assert "## Resumo geral" in video_prompt_gpu

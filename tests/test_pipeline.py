@@ -32,7 +32,7 @@ def test_run_pipeline(tmp_path: Path) -> None:
         )
 
         assert tx_path == output_dir / "input_transcript.srt"
-        assert sum_path == output_dir / "input_meeting_points.md"
+        assert sum_path == output_dir / "input_ata.md"
         assert metadata_res["language"] == "pt"
 
         mock_extract.assert_called_once_with(input_path, output_dir / "input_normalized.wav")
@@ -56,7 +56,7 @@ def test_run_pipeline(tmp_path: Path) -> None:
 
 
         assert (output_dir / "input_transcript.srt").read_text(encoding="utf-8") == mock_srt + "\n"
-        assert (output_dir / "input_meeting_points.md").read_text(encoding="utf-8") == "Mock summary\n"
+        assert (output_dir / "input_ata.md").read_text(encoding="utf-8") == "Mock summary\n"
 
         metadata_content = json.loads((output_dir / "input_metadata.json").read_text(encoding="utf-8"))
         assert metadata_content["language"] == "pt"
@@ -155,8 +155,8 @@ def test_run_pipeline_summarize_only(tmp_path: Path) -> None:
         )
 
         assert tx_path == srt_path
-        assert sum_path == output_dir / "sample_meeting_points.md"
-        assert (output_dir / "sample_meeting_points.md").read_text(encoding="utf-8") == "Summary from SRT\n"
+        assert sum_path == output_dir / "sample_ata.md"
+        assert (output_dir / "sample_ata.md").read_text(encoding="utf-8") == "Summary from SRT\n"
         assert metadata_res["models"]["whisper_model"] == "skipped"
 
 
@@ -196,7 +196,7 @@ def test_run_pipeline_summarize_only_media_file(tmp_path: Path) -> None:
 
 
         assert tx_path == srt_path
-        assert sum_path == output_dir / "arquitetura_meeting_points.md"
+        assert sum_path == output_dir / "arquitetura_ata.md"
 
 
 def test_run_pipeline_summarize_only_missing_srt(tmp_path: Path) -> None:
@@ -281,8 +281,8 @@ def test_run_pipeline_resume_with_existing_transcript(tmp_path: Path) -> None:
             custom_consolidation_prompt=None,
         )
         assert tx_path == srt_path
-        assert sum_path == output_dir / "resume_test_meeting_points.md"
-        assert (output_dir / "resume_test_meeting_points.md").read_text(encoding="utf-8") == "Resumed summary\n"
+        assert sum_path == output_dir / "resume_test_ata.md"
+        assert (output_dir / "resume_test_ata.md").read_text(encoding="utf-8") == "Resumed summary\n"
 
 
 def test_run_pipeline_resume_with_existing_audio(tmp_path: Path) -> None:
@@ -323,7 +323,7 @@ def test_run_pipeline_resume_with_existing_audio(tmp_path: Path) -> None:
             verbose=False,
         )
         assert tx_path == output_dir / "audio_resume_transcript.srt"
-        assert sum_path == output_dir / "audio_resume_meeting_points.md"
+        assert sum_path == output_dir / "audio_resume_ata.md"
 
 
 def test_run_pipeline_resume_with_existing_summary(tmp_path: Path) -> None:
@@ -332,7 +332,7 @@ def test_run_pipeline_resume_with_existing_summary(tmp_path: Path) -> None:
     output_dir = tmp_path / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    sum_path = output_dir / "done_test_meeting_points.md"
+    sum_path = output_dir / "done_test_ata.md"
     sum_path.write_text("Already done summary", encoding="utf-8")
 
     with patch("clerk.pipeline.extract_audio") as mock_extract, \

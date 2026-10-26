@@ -43,10 +43,11 @@ Splits long transcripts without slicing through sentences, clauses, or words.
 ### `get_summary_config(is_video: bool) -> SummaryConfig`
 Returns required section names based on content mode:
 
-- **Meeting Mode (`is_video=False`)**:
-  - `## Pontos principais` (Primary Section)
+- **Meeting / Ata Mode (`is_video=False`)**:
+  - `## Contexto` (Primary Section)
+  - `## Pauta e discussões`
   - `## Decisões`
-  - `## Ações`
+  - `## Encaminhamentos`
   - `## Pendências`
 
 - **Video Mode (`is_video=True`)**:

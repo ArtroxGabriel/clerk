@@ -113,8 +113,8 @@ VIDEO_CONFIG = SummaryConfig(
     primary_section="Resumo geral",
 )
 MEETING_CONFIG = SummaryConfig(
-    sections=["Pontos principais", "Decisões", "Ações", "Pendências"],
-    primary_section="Pontos principais",
+    sections=["Contexto", "Pauta e discussões", "Decisões", "Encaminhamentos", "Pendências"],
+    primary_section="Contexto",
 )
 
 
@@ -170,6 +170,8 @@ def parse_summary_sections(summary: str, is_video: bool = False) -> dict[str, li
                 phrase in lower_content
                 for phrase in [
                     "nenhuma registrada",
+                    "nenhum contexto",
+                    "nenhum encaminhamento",
                     "nenhum ponto",
                     "nenhum resumo",
                     "não há",

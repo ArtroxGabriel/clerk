@@ -103,7 +103,7 @@ def run_pipeline(
 
     if summarize_only:
         base_stem = stem[:-11] if stem.endswith("_transcript") else stem
-        summary_filename = f"{base_stem}_resume.md" if is_video else f"{base_stem}_meeting_points.md"
+        summary_filename = f"{base_stem}_resume.md" if is_video else f"{base_stem}_ata.md"
         summary_path = output_dir / summary_filename
         metadata_path = output_dir / f"{base_stem}_metadata.json"
 
@@ -178,7 +178,7 @@ def run_pipeline(
         logger.info("Summary written to %s", summary_path)
         return transcript_path, summary_path, metadata
 
-    summary_filename = f"{stem}_resume.md" if is_video else f"{stem}_meeting_points.md"
+    summary_filename = f"{stem}_resume.md" if is_video else f"{stem}_ata.md"
     audio_path = output_dir / f"{stem}_normalized.wav"
     transcript_path = output_dir / f"{stem}_transcript.srt"
     summary_path = output_dir / summary_filename
