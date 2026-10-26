@@ -248,7 +248,7 @@ def main(
     ),
     video: bool = typer.Option(False, "--video", help="Enforce video summary prompt template (saves summary to resume.md)."),
     meeting: bool = typer.Option(
-        False, "--meeting", help="Enforce meeting summary prompt template (saves summary to meeting_points.md)."
+        False, "--meeting", help="Enforce meeting minutes (Ata) prompt template (saves summary to ata.md)."
     ),
     transcribe_only: bool = typer.Option(
         False, "--transcribe-only", help="Execute only audio extraction and speech transcription steps."

@@ -48,23 +48,27 @@ def test_split_transcript_by_words() -> None:
 
 def test_parse_summary_sections() -> None:
     summary_text = """
-## Pontos principais
+## Contexto
+- Alinhamento do projeto
+
+## Pauta e discussões
 - Ponto 1
 * Ponto 2
 
 ## Decisões
 1. Decisão A
 
-## Ações
+## Encaminhamentos
 - Nenhuma registrada.
 
 ## Pendências
 - Pendência X
 """
     sections = parse_summary_sections(summary_text)
-    assert sections["Pontos principais"] == ["Ponto 1", "Ponto 2"]
+    assert sections["Contexto"] == ["Alinhamento do projeto"]
+    assert sections["Pauta e discussões"] == ["Ponto 1", "Ponto 2"]
     assert sections["Decisões"] == ["Decisão A"]
-    assert sections["Ações"] == []
+    assert sections["Encaminhamentos"] == []
     assert sections["Pendências"] == ["Pendência X"]
 
 
@@ -119,14 +123,14 @@ def test_summarize_multi_chunk() -> None:
     # 6 words total, max_words_per_chunk=3 -> 2 chunks
     long_transcript = "one two three\nfour five six"
 
-    # Mock Ollama responses: 2 chunk summaries + 4 consolidation responses + 1 unload response
+    # Mock Ollama responses: 2 chunk summaries + 1 consolidation response + 1 unload response
     chunk_1_resp = MagicMock()
     chunk_1_resp.status_code = 200
-    chunk_1_resp.json.return_value = {"response": "## Pontos principais\n- Point 1"}
+    chunk_1_resp.json.return_value = {"response": "## Contexto\n- Point 1"}
 
     chunk_2_resp = MagicMock()
     chunk_2_resp.status_code = 200
-    chunk_2_resp.json.return_value = {"response": "## Pontos principais\n- Point 2"}
+    chunk_2_resp.json.return_value = {"response": "## Contexto\n- Point 2"}
 
     cons_resp = MagicMock()
     cons_resp.status_code = 200
@@ -141,7 +145,9 @@ def test_summarize_multi_chunk() -> None:
 
     with patch("httpx.Client", return_value=mock_client):
         result = summarize_transcript(long_transcript, max_words_per_chunk=3)
-        assert "## Pontos principais" in result
+        assert "## Contexto" in result
+        assert "## Pauta e discussões" in result
+        assert "## Encaminhamentos" in result
         assert "- Consolidated Point" in result
         assert mock_client.post.call_count == 4
 

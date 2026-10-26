@@ -11,12 +11,12 @@ graph TD
     A["Audio / Video Input or YouTube URL"] --> B["Audio Extraction & Normalization (FFmpeg / yt-dlp)"]
     B -->|"16kHz Mono WAV"| C["Batched Transcription (faster-whisper)"]
     C -->|"Generate transcript.srt"| D["Map-Reduce LLM Summarization (Ollama)"]
-    D -->|"Generate meeting_points.md"| E["Outputs & Status Report"]
+    D -->|"Generate ata.md"| E["Outputs & Status Report"]
 ```
 
 1. **Audio Extraction**: Converts input files (`.mp3`, `.mp4`, `.wav`, `.mkv`) or YouTube URLs into normalized PCM 16-bit, 16kHz mono `.wav` audio via `ffmpeg` / `yt-dlp`.
 2. **Batched Transcription**: Transcribes audio in parallel batches using `faster-whisper` (`BatchedInferencePipeline`) and outputs a timestamped `.srt` subtitle file.
-3. **Structured Summarization**: Feeds the transcript to a local **Ollama** model (`LiquidAI/lfm2.5-1.2b-instruct` or custom) to produce structured Portuguese meeting points (*Pontos principais*, *Decisões*, *Ações*, *Pendências*). Long transcripts are automatically split and consolidated using Map-Reduce.
+3. **Structured Summarization**: Feeds the transcript to a local **Ollama** model (`LiquidAI/lfm2.5-1.2b-instruct` or custom) to produce structured Portuguese meeting minutes / Ata (*Contexto*, *Pauta e discussões*, *Decisões*, *Encaminhamentos*, *Pendências*). Long transcripts are automatically split and consolidated using Map-Reduce.
 
 ---
 
@@ -117,7 +117,7 @@ uv run clerk --target <path_or_youtube_url> [OPTIONS]
 | `--resume`, `-r` | `flag` | `False` | Reuse existing intermediate files (`.wav` / `.srt` / summary) |
 | `--force`, `-f` | `flag` | `False` | Force re-generation of all pipeline steps from scratch |
 | `--video` | `flag` | `False` | Enforce video summary prompt template (saves summary to `<stem>_resume.md`) |
-| `--meeting` | `flag` | `False` | Enforce meeting summary prompt template (saves summary to `<stem>_meeting_points.md`) |
+| `--meeting` | `flag` | `False` | Enforce meeting minutes (Ata) prompt template (saves summary to `<stem>_ata.md`) |
 | `--verbose` | `flag` | `False` | Enable detailed configuration and step timing logs |
 
 ### ⚡ Isolated Step Execution
@@ -156,7 +156,7 @@ All outputs are suffixed with the input file/video name and saved to `--output-d
 
 - **`<name>_transcript.srt`**: Timestamps and subtitles in SubRip format.
 - **`<name>_resume.md`**: Video summary (used when `--video` is set or processing video URLs).
-- **`<name>_meeting_points.md`**: Meeting points summary (used when `--meeting` is set or processing audio/meeting files).
+- **`<name>_ata.md`**: Meeting minutes / Ata summary (used when `--meeting` is set or processing local audio/meeting files).
 - **`<name>_metadata.json`**: Execution timings, models used, and audio metrics.
 - **`<name>_normalized.wav`**: 16kHz mono audio extracted from input.
 

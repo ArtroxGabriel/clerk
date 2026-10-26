@@ -7,7 +7,7 @@
 - **Input Sources**: Supports local media files (`.mp4`, `.mp3`, `.wav`, etc.) and YouTube URLs (uses `yt-dlp` subtitle fast-path when available, falling back to audio download with human-readable video titles).
 - **Audio Normalization**: Normalizes inputs to 16kHz, mono WAV format using `ffmpeg`.
 - **Speech-to-Text (STT)**: Transcribes audio using `faster-whisper` (`BatchedInferencePipeline`, defaulting to `large-v3-turbo`) with progress bar logging, VAD filtering, configurable batch sizes, and explicit VRAM cleanup (`gc.collect()`). Outputs both raw `.txt` and timestamped `.srt` files.
-- **LLM Summarization**: Interfaces with a local Ollama instance (`http://127.0.0.1:11434`) via reusable HTTP connections to produce structured Portuguese markdown summaries (`## Pontos principais`, `## Decisões`, `## Ações`, `## Pendências` or video equivalents).
+- **LLM Summarization**: Interfaces with a local Ollama instance (`http://127.0.0.1:11434`) via reusable HTTP connections to produce structured Portuguese markdown meeting minutes / Ata (`## Contexto`, `## Pauta e discussões`, `## Decisões`, `## Encaminhamentos`, `## Pendências` saved to `<stem>_ata.md`) or general video summaries (`<stem>_resume.md`).
 - **CPU vs GPU Strategy**: Features dedicated prompt strategies (`CpuPromptStrategy` for models like `LiquidAI/lfm2.5-1.2b-instruct`, `GpuPromptStrategy` for models like `gemma4:e2b` / `llama3.1:8b`, and `CustomPromptStrategy` for custom templates).
 - **Custom Prompt Overrides**: Supports overriding stage 1 summary/chunk prompts (`--prompt` or `--prompt-file`) and stage 2 consolidation prompts (`--consolidation-prompt` or `--consolidation-prompt-file`) with `{transcript}`, `{category}`, `{items}`, and `{language}` placeholder substitution.
 - **Isolated Step Execution & Resuming**: Supports running only transcription (`--transcribe-only`), only summarization (`--summarize-only` or passing `.srt` targets directly), and resuming previous pipeline progress with `--resume` / `-r` (or forcing regeneration with `--force` / `-f`).
@@ -73,6 +73,7 @@ Always use the registered `uv` environment runners:
 - **Run Tests**: `uv run clerk-test` (Custom runner script ensuring environment sync; do NOT guess standard pytest).
 - **Type Checking**: `uv run pyrefly check` (Pyrefly is our static type checker and LSP).
 - **Linting / Formatting**: `uv run ruff check`
+- **Git Branching Rule**: Always create and switch to a new Git branch (`git checkout -b <branch>`) before implementing features, fixes, or code changes; never commit directly on `main`.
 
 ### 🏗️ Architecture & Operation
 

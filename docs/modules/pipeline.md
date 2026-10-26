@@ -51,7 +51,7 @@ def run_pipeline(
 Based on `input_path.stem`:
 - Normalized Audio: `<stem>_normalized.wav`
 - SRT Subtitles: `<stem>_transcript.srt`
-- Summary Document: `<stem>_resume.md` (`is_video=True`) or `<stem>_meeting_points.md` (`is_video=False`)
+- Summary Document: `<stem>_resume.md` (`is_video=True`) or `<stem>_ata.md` (`is_video=False`)
 - Execution Metadata: `<stem>_metadata.json`
 
 ---
@@ -84,7 +84,7 @@ Based on `input_path.stem`:
   "output_files": {
     "audio_path": "output/sample_normalized.wav",
     "transcript_path": "output/sample_transcript.srt",
-    "summary_path": "output/sample_meeting_points.md",
+    "summary_path": "output/sample_ata.md",
     "metadata_path": "output/sample_metadata.json"
   }
 }
