@@ -72,6 +72,27 @@ def test_parse_summary_sections() -> None:
     assert sections["Pendências"] == ["Pendência X"]
 
 
+def test_parse_summary_sections_filters_no_decision_and_no_pendencia_phrases() -> None:
+    # Arrange
+    summary_text = """
+## Decisões
+- Nenhuma decisão formal específica foi registrada no trecho transcrito.
+- Não foram registradas decisões formais sobre a arquitetura.
+- Decisão real aprovada.
+
+## Pendências
+- Nenhuma pendência registrada.
+- Sem pendências formais específicas registradas.
+- Pendência real aberta.
+"""
+    # Act
+    sections = parse_summary_sections(summary_text)
+
+    # Assert
+    assert sections["Decisões"] == ["Decisão real aprovada."]
+    assert sections["Pendências"] == ["Pendência real aberta."]
+
+
 def test_summarize_empty_transcript() -> None:
     with pytest.raises(ValueError, match="transcript is empty"):
         summarize_transcript("   ")
@@ -123,7 +144,7 @@ def test_summarize_multi_chunk() -> None:
     # 6 words total, max_words_per_chunk=3 -> 2 chunks
     long_transcript = "one two three\nfour five six"
 
-    # Mock Ollama responses: 2 chunk summaries + 1 consolidation response + 1 unload response
+    # Mock Ollama responses: 2 chunk summaries + 1 consolidation response + 1 review response + 1 unload response
     chunk_1_resp = MagicMock()
     chunk_1_resp.status_code = 200
     chunk_1_resp.json.return_value = {"response": "## Contexto\n- Point 1"}
@@ -136,11 +157,15 @@ def test_summarize_multi_chunk() -> None:
     cons_resp.status_code = 200
     cons_resp.json.return_value = {"response": "- Consolidated Point"}
 
+    review_resp = MagicMock()
+    review_resp.status_code = 200
+    review_resp.json.return_value = {"response": "NONE"}
+
     unload_resp = MagicMock()
     unload_resp.status_code = 200
 
     mock_client = MagicMock()
-    mock_client.post.side_effect = [chunk_1_resp, chunk_2_resp, cons_resp, unload_resp]
+    mock_client.post.side_effect = [chunk_1_resp, chunk_2_resp, cons_resp, review_resp, unload_resp]
     mock_client.__enter__.return_value = mock_client
 
     with patch("httpx.Client", return_value=mock_client):
@@ -149,7 +174,44 @@ def test_summarize_multi_chunk() -> None:
         assert "## Pauta e discussões" in result
         assert "## Encaminhamentos" in result
         assert "- Consolidated Point" in result
-        assert mock_client.post.call_count == 4
+        assert mock_client.post.call_count == 5
+
+
+def test_summarize_multi_chunk_review_applies_entity_replacements() -> None:
+    # Arrange: review pass returns `variant -> canonical_name` rules applied across sections
+    long_transcript = "one two three\nfour five six"
+
+    class SequenceFakeBackend:
+        def __init__(self, responses: list[str]) -> None:
+            self.responses = list(responses)
+            self.prompts: list[str] = []
+
+        def generate(self, prompt: str) -> str:
+            self.prompts.append(prompt)
+            return self.responses.pop(0)
+
+        def cleanup(self) -> None:
+            pass
+
+    backend = SequenceFakeBackend(
+        [
+            "## Contexto\n- João Silv falou",
+            "## Contexto\n- João Silva confirmou",
+            "- João Silv e João Silva alinharam com Professora Imônica",
+            "- `João Silv -> João Silva`\n- Professora Imônica -> Professora Mônica",
+        ]
+    )
+
+    # Act
+    result = summarize_transcript(long_transcript, max_words_per_chunk=3, backend=backend)
+
+    # Assert
+    assert "## Contexto\n- João Silva e João Silva alinharam com Professora Mônica" in result
+    assert "João Silv " not in result
+    assert "Professora Imônica" not in result
+    assert "## Pauta e discussões" in result
+    assert len(backend.prompts) == 4
+    assert "<<<DRAFT>>>" in backend.prompts[-1]
 
 
 

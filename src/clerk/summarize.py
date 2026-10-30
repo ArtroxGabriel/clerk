@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections import Counter
 from dataclasses import dataclass
 
 from .backends import (
@@ -174,6 +175,14 @@ def parse_summary_sections(summary: str, is_video: bool = False) -> dict[str, li
                     "nenhum encaminhamento",
                     "nenhum ponto",
                     "nenhum resumo",
+                    "nenhuma decisão",
+                    "nenhuma pendência",
+                    "não foram registradas decisões",
+                    "não foram tomadas decisões",
+                    "não foram formalizadas decisões",
+                    "não houve registro de decisão",
+                    "não houve decisões",
+                    "sem pendências formais",
                     "não há",
                     "none registered",
                     "no summary",
@@ -248,6 +257,57 @@ def _consolidate_sections(
     return "\n\n".join(f"## {sec}\n{summaries[sec]}" for sec in config.sections).strip()
 
 
+def _extract_candidate_entities(text: str) -> str:
+    """Extracts sorted unique mid-sentence capitalized names and titles with frequency counts."""
+    lines = [
+        re.sub(r"^[*+-]\s*(?:\*\*[^*]+\*\*|\[[^\]]+\]:?|[A-ZÀ-Ý][a-zà-ÿ]+:)?\s*", "", line)
+        for line in text.splitlines()
+        if not line.startswith("#")
+    ]
+    body = "\n".join(lines)
+    matches = re.findall(
+        r"(?<!^)\b(?:[Pp]rofessor(?:a)?\s+[A-ZÀ-Ý][a-zà-ÿ]+|[Dd]r(?:a)?\.?\s+[A-ZÀ-Ý][a-zà-ÿ]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ]+)*|[A-ZÀ-Ý][a-zà-ÿ]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ]+)*)\b",
+        body,
+        re.MULTILINE,
+    )
+    counts: Counter[str] = Counter(m.strip() for m in matches if len(m.strip()) >= 4)
+    sorted_items = sorted(counts.items(), key=lambda x: x[0].lower())
+    return "\n".join(f"- {name} ({count}x)" for name, count in sorted_items)
+
+
+def _review_consolidated_summary(
+    draft: str,
+    transcript: str,
+    prompt_strategy: PromptStrategy,
+    backend: LLMBackend,
+    lang_name: str,
+) -> str:
+    """Extracts phonetic entity replacement pairs via LLM and applies them across the draft."""
+    logger.info("Reviewing consolidated summary for entity consistency...")
+    candidates = _extract_candidate_entities(f"{transcript}\n{draft}")
+    prompt = prompt_strategy.build_review_prompt(draft=candidates or draft, language=lang_name)
+    mapping_output = backend.generate(prompt)
+    if not mapping_output:
+        return draft
+
+    logger.debug("Entity review output:\n%s", mapping_output)
+    updated = draft
+    for raw_line in mapping_output.splitlines():
+        line = re.sub(r"^[-*•\d.)\s`]+|[`\s]+$", "", raw_line)
+        if "->" not in line:
+            continue
+        lhs, canonical = (
+            re.sub(r"\s*\(\d+x\)$", "", part.strip(" `'\"")) for part in line.split("->", 1)
+        )
+        if not canonical or canonical.upper() == "NONE":
+            continue
+        for wrong in re.split(r"\s*[,;/]\s*", lhs):
+            wrong_clean = re.sub(r"\s*\(\d+x\)$", "", wrong.strip(" `'\""))
+            if wrong_clean and wrong_clean.lower() != canonical.lower() and len(wrong_clean) >= 3:
+                updated = re.sub(rf"\b{re.escape(wrong_clean)}\b", canonical, updated, flags=re.IGNORECASE)
+    return updated
+
+
 def summarize_transcript(
     transcript: str,
     model_name: str = DEFAULT_LLM_MODEL,
@@ -308,6 +368,7 @@ def summarize_transcript(
         )
         chunks = split_transcript_smart(cleaned_transcript, max_words_per_chunk)
         combined_sections = _process_chunks(chunks, prompt_strategy, active_backend, lang_name, is_video, config)
-        return _consolidate_sections(combined_sections, prompt_strategy, active_backend, lang_name, config)
+        draft = _consolidate_sections(combined_sections, prompt_strategy, active_backend, lang_name, config)
+        return _review_consolidated_summary(draft, cleaned_transcript, prompt_strategy, active_backend, lang_name)
     finally:
         active_backend.cleanup()
