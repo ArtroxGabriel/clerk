@@ -25,11 +25,15 @@ class PromptStrategy(Protocol):
     def build_consolidation_prompt(self, category: str, items: str, language: str) -> str:
         ...
 
+    def build_review_prompt(self, draft: str, language: str) -> str:
+        ...
+
 
 class BasePromptStrategy:
     MEETING_PROMPT: str = ""
     VIDEO_PROMPT: str = ""
     CONSOLIDATE_PROMPT: str = ""
+    REVIEW_PROMPT: str = ""
 
     def build_summary_prompt(self, transcript: str, language: str, is_video: bool) -> str:
         template = self.VIDEO_PROMPT if is_video else self.MEETING_PROMPT
@@ -37,6 +41,9 @@ class BasePromptStrategy:
 
     def build_consolidation_prompt(self, category: str, items: str, language: str) -> str:
         return self.CONSOLIDATE_PROMPT.format(category=category, items=items, language=language)
+
+    def build_review_prompt(self, draft: str, language: str) -> str:
+        return self.REVIEW_PROMPT.format(draft=draft, language=language)
 
 
 class PromptManager:

@@ -85,6 +85,12 @@ def test_prompt_manager_and_strategies() -> None:
     assert "<<<END TRANSCRIPT>>>" in video_prompt_gpu
     assert video_prompt_gpu.index("<<<END TRANSCRIPT>>>") < video_prompt_gpu.index("OUTPUT FORMAT:")
     assert meeting_prompt_cpu.index("<<<END TRANSCRIPT>>>") < meeting_prompt_cpu.index("OUTPUT FORMAT:")
+    assert "phonetic spelling variations" in meeting_prompt_cpu
+    assert "phonetic spelling variations" in meeting_prompt_gpu
+    assert "phonetic spelling variations" in cpu_strat.build_consolidation_prompt("Contexto", "- a", "Portuguese")
+    assert "phonetic spelling variations" in gpu_strat.build_consolidation_prompt("Contexto", "- a", "Portuguese")
+    assert "<<<DRAFT>>>" in cpu_strat.build_review_prompt("## Contexto\n- a", "Portuguese")
+    assert "<<<DRAFT>>>" in gpu_strat.build_review_prompt("## Contexto\n- a", "Portuguese")
 
 
 def test_custom_prompt_strategy() -> None:

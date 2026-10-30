@@ -60,3 +60,8 @@ class CustomPromptStrategy:
 
         formatted = template.replace("{category}", category).replace("{language}", language)
         return f"{formatted}\n\nItems to consolidate:\n<<<ITEMS>>>\n{items}\n<<<END ITEMS>>>"
+
+    def build_review_prompt(self, draft: str, language: str) -> str:
+        if self.fallback_strategy:
+            return self.fallback_strategy.build_review_prompt(draft=draft, language=language)
+        raise ValueError("No fallback strategy provided for review prompt.")
