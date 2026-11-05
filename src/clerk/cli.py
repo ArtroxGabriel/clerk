@@ -178,6 +178,12 @@ def _prompt_pipeline_recovery(
         return current_llm, current_whisper, current_compute, current_device, False
 
     typer.echo(f"\n⚠️  Pipeline error: {error}", err=True)
+    if "libcublas" in str(error).lower():
+        typer.echo(
+            "💡 Missing CUDA runtime libraries. Install CUDA dependencies with:\n"
+            "   uv sync --extra cuda\n",
+            err=True,
+        )
     typer.echo("Model or pipeline failure detected. Choose recovery option:", err=True)
     typer.echo(f"  [1] Enter a new LLM model name (current: {current_llm})")
     typer.echo(f"  [2] Enter a new Whisper model name (current: {current_whisper})")

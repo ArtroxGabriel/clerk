@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import gc
 import logging
 import os
@@ -62,6 +63,40 @@ def segments_to_srt(segments: list) -> tuple[str, str]:
     return plain_text, srt_text
 
 
+def preload_cuda_libraries() -> bool:
+    """Preload bundled NVIDIA CUDA libraries into process memory.
+
+    Example:
+        >>> loaded = preload_cuda_libraries()
+        >>> isinstance(loaded, bool)
+        True
+    """
+    loaded_any = False
+    for pkg_name in ("nvidia.cublas.lib", "nvidia.cudnn.lib"):
+        try:
+            pkg = __import__(pkg_name, fromlist=["__path__"])
+        except ImportError:
+            continue
+
+        for path_str in getattr(pkg, "__path__", []):
+            lib_dir = Path(path_str)
+            if not lib_dir.is_dir():
+                continue
+
+            current_ld = os.environ.get("LD_LIBRARY_PATH", "")
+            if str(lib_dir) not in current_ld.split(":"):
+                os.environ["LD_LIBRARY_PATH"] = f"{lib_dir}:{current_ld}".strip(":")
+
+            for so_file in sorted(lib_dir.glob("*.so*")):
+                try:
+                    ctypes.CDLL(str(so_file), mode=ctypes.RTLD_GLOBAL)
+                    loaded_any = True
+                except OSError:
+                    continue
+
+    return loaded_any
+
+
 def transcribe_file(
     audio_path: Path,
     model_name: str = "small",
@@ -82,6 +117,9 @@ def transcribe_file(
 
     if verbose:
         logging.getLogger("faster_whisper").setLevel(logging.DEBUG)
+
+    if device.lower() in ("cuda", "gpu") or device.lower().startswith("cuda"):
+        preload_cuda_libraries()
 
     effective_compute_type = compute_type
     if compute_type == "int8" and (device.lower() in ("cuda", "gpu") or device.lower().startswith("cuda")):

@@ -91,6 +91,9 @@ def is_gpu_available() -> bool:
         return True
 
     try:
+        from clerk.transcribe import preload_cuda_libraries
+
+        preload_cuda_libraries()
         import ctranslate2
 
         return ctranslate2.get_cuda_device_count() > 0
