@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -7,6 +8,7 @@ import pytest
 
 from clerk.transcribe import (
     format_timestamp,
+    preload_cuda_libraries,
     segments_to_srt,
     transcribe_file,
 )
@@ -213,5 +215,91 @@ def test_transcribe_releases_vram_via_gc_collect(tmp_path: Path) -> None:
     ):
         transcribe_file(audio_path, device="cuda")
         mock_gc.assert_called_once()
+
+
+def test_preload_cuda_libraries_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange
+    fake_lib_dir = tmp_path / "nvidia" / "cublas" / "lib"
+    fake_lib_dir.mkdir(parents=True)
+    fake_so = fake_lib_dir / "libcublas.so.12"
+    fake_so.touch()
+
+    fake_pkg = MagicMock(__path__=[str(fake_lib_dir)])
+    monkeypatch.setenv("LD_LIBRARY_PATH", "")
+
+    import builtins
+    from collections.abc import Mapping, Sequence
+    orig_import = builtins.__import__
+
+    def mock_import(
+        name: str,
+        globals: Mapping[str, object] | None = None,
+        locals: Mapping[str, object] | None = None,
+        fromlist: Sequence[str] = (),
+        level: int = 0,
+    ) -> object:
+        if name == "nvidia.cublas.lib":
+            return fake_pkg
+        if name == "nvidia.cudnn.lib":
+            raise ImportError(f"No module named {name}")
+        return orig_import(name, globals, locals, fromlist, level)
+
+    # Act
+    with (
+        patch("builtins.__import__", side_effect=mock_import),
+        patch("ctypes.CDLL") as mock_cdll,
+    ):
+        loaded = preload_cuda_libraries()
+
+    # Assert
+    assert loaded is True
+    mock_cdll.assert_called_once()
+    assert str(fake_lib_dir) in os.environ.get("LD_LIBRARY_PATH", "")
+
+
+def test_preload_cuda_libraries_missing_packages() -> None:
+    # Arrange
+    import builtins
+    from collections.abc import Mapping, Sequence
+    orig_import = builtins.__import__
+
+    def mock_import(
+        name: str,
+        globals: Mapping[str, object] | None = None,
+        locals: Mapping[str, object] | None = None,
+        fromlist: Sequence[str] = (),
+        level: int = 0,
+    ) -> object:
+        if name.startswith("nvidia."):
+            raise ImportError(f"No module named {name}")
+        return orig_import(name, globals, locals, fromlist, level)
+
+    # Act
+    with patch("builtins.__import__", side_effect=mock_import):
+        loaded = preload_cuda_libraries()
+
+    # Assert
+    assert loaded is False
+
+
+def test_transcribe_triggers_preload_cuda_on_cuda(tmp_path: Path) -> None:
+    # Arrange
+    audio_path = tmp_path / "audio.wav"
+    audio_path.write_text("audio")
+    mock_segment = MagicMock(start=0.0, end=1.0, text="text")
+    mock_info = MagicMock(language="pt", language_probability=1.0, duration=1.0, duration_after_vad=1.0)
+    mock_model = MagicMock()
+    mock_batched = MagicMock()
+    mock_batched.transcribe.return_value = ([mock_segment], mock_info)
+
+    # Act & Assert
+    with (
+        patch("clerk.transcribe.WhisperModel", return_value=mock_model),
+        patch("clerk.transcribe.BatchedInferencePipeline", return_value=mock_batched),
+        patch("clerk.transcribe.preload_cuda_libraries") as mock_preload,
+    ):
+        transcribe_file(audio_path, device="cuda")
+        mock_preload.assert_called_once()
+
 
 
