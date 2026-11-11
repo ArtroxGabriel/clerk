@@ -9,6 +9,14 @@ import questionary
 from rich.console import Console, Group
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeRemainingColumn,
+)
 from rich.table import Table
 from rich.text import Text
 
@@ -129,39 +137,39 @@ def render_config_panel(cfg: ResolvedConfig, console: Console | None = None) -> 
 
 
 def _build_timings_table(timings: dict[str, Any], verbose: bool) -> Table:
-    t_table = Table(title="Execution Times", box=None, show_header=True, pad_edge=False)
-    t_table.add_column("Phase", style="cyan")
-    t_table.add_column("Duration", style="green", justify="right")
+    t_table = Table(box=None, show_header=False, pad_edge=False)
+    t_table.add_column("Phase", style="bold cyan")
+    t_table.add_column("Duration", style="bold green", justify="right")
 
-    t_table.add_row("Total Time", _format_time_hhmmssmm(float(timings.get("total_seconds", 0.0))))
+    t_table.add_row("  • Total Time", _format_time_hhmmssmm(float(timings.get("total_seconds", 0.0))))
     if verbose:
         t_table.add_row(
-            "  • Audio Extract", _format_time_hhmmssmm(float(timings.get("audio_extraction_seconds", 0.0)))
+            "    - Audio Extract", _format_time_hhmmssmm(float(timings.get("audio_extraction_seconds", 0.0)))
         )
         t_table.add_row(
-            "  • Transcription", _format_time_hhmmssmm(float(timings.get("transcription_seconds", 0.0)))
+            "    - Transcription", _format_time_hhmmssmm(float(timings.get("transcription_seconds", 0.0)))
         )
         t_table.add_row(
-            "  • Summarization", _format_time_hhmmssmm(float(timings.get("summarization_seconds", 0.0)))
+            "    - Summarization", _format_time_hhmmssmm(float(timings.get("summarization_seconds", 0.0)))
         )
     return t_table
 
 
 def _build_metrics_table(metadata: dict[str, Any], word_counts: dict[str, Any]) -> Table:
-    m_table = Table(title="Audio & Content Metrics", box=None, show_header=True, pad_edge=False)
-    m_table.add_column("Metric", style="cyan")
+    m_table = Table(box=None, show_header=False, pad_edge=False)
+    m_table.add_column("Metric", style="bold cyan")
     m_table.add_column("Value", style="white")
 
     lang_prob = metadata.get("language_probability")
     prob_str = f" ({lang_prob:.0%})" if lang_prob is not None else ""
-    m_table.add_row("Detected Language", f"{metadata.get('language')}{prob_str}")
+    m_table.add_row("  • Detected Language", f"{metadata.get('language')}{prob_str}")
 
     duration = float(metadata.get("duration", 0.0))
     speech = float(metadata.get("duration_after_vad", 0.0))
-    m_table.add_row("Audio Duration", f"{_format_time_hhmmssmm(duration)} (Speech: {_format_time_hhmmssmm(speech)})")
+    m_table.add_row("  • Audio Duration", f"{_format_time_hhmmssmm(duration)} (Speech: {_format_time_hhmmssmm(speech)})")
     t_words = word_counts.get("transcript_words", 0)
     s_words = word_counts.get("summary_words", 0)
-    m_table.add_row("Word Counts", f"{t_words} words transcript ➔ {s_words} words summary")
+    m_table.add_row("  • Word Counts", f"{t_words} words transcript ➔ {s_words} words summary")
     return m_table
 
 
@@ -222,12 +230,35 @@ def render_status_summary(
         _build_paths_text(transcript_path, summary_path, metadata_file),
         _build_models_text(models),
         Text("\n"),
+        Text("⏱️  Execution Times:\n", style="bold yellow"),
         _build_timings_table(timings, verbose),
         Text("\n"),
+        Text("📊 Audio & Content Metrics:\n", style="bold yellow"),
         _build_metrics_table(metadata, word_counts),
     )
     panel = Panel(group, title="[bold green]✔ Pipeline Status[/bold green]", border_style="green", padding=(1, 2))
     out.print(panel)
+
+
+def create_transcription_progress(console: Console | None = None) -> Progress:
+    """Create a styled Rich Progress bar for speech-to-text transcription."""
+    out = console or get_console()
+    return Progress(
+        SpinnerColumn(spinner_name="dots", style="bold cyan"),
+        TextColumn("[bold cyan]Transcribing with Whisper[/bold cyan] [dim]({task.fields[model]})[/dim]"),
+        BarColumn(bar_width=30, style="blue", complete_style="bold green"),
+        TaskProgressColumn(),
+        TimeRemainingColumn(),
+        console=out,
+        transient=False,
+    )
+
+
+def print_step_complete(message: str, elapsed: float | None = None, console: Console | None = None) -> None:
+    """Print step completion confirmation with green checkmark."""
+    out = console or get_console()
+    timing_str = f" [dim]({_format_time_hhmmssmm(elapsed)})[/dim]" if elapsed is not None else ""
+    out.print(f"[bold green]✔[/bold green] {message}{timing_str}")
 
 
 def render_markdown_preview(markdown_content: str, title: str = "Generated Summary", console: Console | None = None) -> None:

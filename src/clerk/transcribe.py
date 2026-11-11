@@ -142,11 +142,33 @@ def transcribe_file(
             vad_filter=True,
             word_timestamps=False,
             batch_size=batch_size,
-            log_progress=log_progress,
+            log_progress=False,
         )
 
-        # Convert generator to list to iterate for both SRT and plain text
-        segments_list = list(segments)
+        from .ui import create_transcription_progress
+
+        try:
+            duration_val = float(info.duration_after_vad) if getattr(info, "duration_after_vad", None) is not None else 0.0
+        except (TypeError, ValueError):
+            duration_val = 0.0
+        if duration_val <= 0.0:
+            try:
+                duration_val = float(info.duration) if getattr(info, "duration", None) is not None else 1.0
+            except (TypeError, ValueError):
+                duration_val = 1.0
+        total_duration = max(duration_val, 1.0)
+
+        segments_list: list = []
+        with create_transcription_progress() as progress:
+            task_id = progress.add_task("transcribing", total=total_duration, model=model_name)
+            for segment in segments:
+                segments_list.append(segment)
+                try:
+                    seg_end = float(segment.end)
+                except (TypeError, ValueError, AttributeError):
+                    seg_end = 0.0
+                progress.update(task_id, completed=min(seg_end, total_duration))
+
         plain_text, srt_text = segments_to_srt(segments_list)
 
         metadata = {
