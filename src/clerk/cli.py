@@ -21,6 +21,7 @@ from .config import (
     is_gpu_available,
     resolve_cli_config,
 )
+from .interactive import resolve_companion_srt, run_interactive_session
 from .pipeline import run_pipeline
 from .ui import (
     format_time_hhmmssmm,
@@ -268,6 +269,17 @@ def main(
         False, "--resume", "-r", help="Reuse existing intermediate files (.wav / .srt / summary) if available."
     ),
     force: bool = typer.Option(False, "--force", "-f", help="Force re-generation of all pipeline steps."),
+    interactive: bool = typer.Option(
+        False,
+        "--interactive",
+        "-i",
+        help="Launch interactive Ata/summary refinement session with SRT grounding.",
+    ),
+    srt: Path | None = typer.Option(
+        None,
+        "--srt",
+        help="Path to companion .srt file for interactive grounding.",
+    ),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
     configure_logging(verbose)
@@ -295,6 +307,8 @@ def main(
         force=force,
         verbose=verbose,
         gpu_supported=is_gpu_available(),
+        interactive=interactive,
+        srt=srt,
     )
 
     render_startup_banner(
@@ -308,8 +322,26 @@ def main(
     if cfg.verbose:
         _print_verbose_config(cfg)
 
+    is_gpu_mode = cfg.selected_preset in GPU_PRESETS or cfg.whisper_device.lower() in ("cuda", "gpu")
     temp_file: Path | None = None
     try:
+        if cfg.interactive_only:
+            md_path = Path(cfg.target)
+            companion_srt = resolve_companion_srt(md_path, explicit_srt=cfg.srt_path)
+            render_markdown_preview(
+                markdown_content=md_path.read_text(encoding="utf-8"),
+                title=md_path.name,
+            )
+            run_interactive_session(
+                summary_path=md_path,
+                srt_path=companion_srt,
+                llm_model=cfg.llm_model,
+                language=cfg.language,
+                is_video=cfg.is_video,
+                is_gpu=is_gpu_mode,
+            )
+            return
+
         input_path, temp_file, effective_summarize_only = _prepare_input_target(cfg)
         transcript_path, summary_path, metadata = _run_pipeline_with_recovery(
             input_path=input_path,
@@ -328,6 +360,24 @@ def main(
                 markdown_content=summary_path.read_text(encoding="utf-8"),
                 title=summary_path.name,
             )
+            if cfg.interactive:
+                effective_srt = (
+                    cfg.srt_path
+                    if cfg.srt_path
+                    else (
+                        transcript_path
+                        if transcript_path and transcript_path.exists()
+                        else resolve_companion_srt(summary_path)
+                    )
+                )
+                run_interactive_session(
+                    summary_path=summary_path,
+                    srt_path=effective_srt,
+                    llm_model=cfg.llm_model,
+                    language=cfg.language,
+                    is_video=cfg.is_video,
+                    is_gpu=is_gpu_mode,
+                )
     except KeyboardInterrupt as err:
         typer.echo("\nProcess interrupted by user. Exiting...", err=True)
         raise typer.Exit(code=EXIT_INTERRUPTED) from err

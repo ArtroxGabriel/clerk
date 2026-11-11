@@ -562,3 +562,87 @@ def test_cli_recovery_retries_with_resume(tmp_path: Path) -> None:
 
 
 
+
+def test_cli_interactive_flag_launches_session_after_pipeline(tmp_path: Path) -> None:
+    input_file = tmp_path / "sample.mp3"
+    input_file.write_text("mock audio content")
+    summary_file = tmp_path / "sample_ata.md"
+    summary_file.write_text("## Contexto\n- Reunião.\n")
+    srt_file = tmp_path / "sample_transcript.srt"
+    srt_file.write_text("1\n00:00:01,000 --> 00:00:03,000\nOi\n")
+    mock_res_meta = {"timings": {}, "models": {}, "word_counts": {}}
+
+    with (
+        patch("clerk.cli.run_pipeline", return_value=(srt_file, summary_file, mock_res_meta)),
+        patch("clerk.cli.run_interactive_session") as mock_interactive,
+    ):
+        result = runner.invoke(app, [str(input_file), "-i"])
+        assert result.exit_code == 0
+        mock_interactive.assert_called_once_with(
+            summary_path=summary_file,
+            srt_path=srt_file,
+            llm_model="LiquidAI/lfm2.5-1.2b-instruct",
+            language="pt",
+            is_video=False,
+            is_gpu=False,
+        )
+
+
+def test_cli_md_target_auto_enables_interactive_only_mode(tmp_path: Path) -> None:
+    summary_file = tmp_path / "reuniao_ata.md"
+    summary_file.write_text("## Contexto\n- Ata existente.\n")
+    srt_file = tmp_path / "reuniao_transcript.srt"
+    srt_file.write_text("1\n00:00:01,000 --> 00:00:03,000\nOi\n")
+
+    with (
+        patch("clerk.cli.run_pipeline") as mock_run,
+        patch("clerk.cli.run_interactive_session") as mock_interactive,
+    ):
+        result = runner.invoke(app, [str(summary_file)])
+        assert result.exit_code == 0
+        mock_run.assert_not_called()
+        mock_interactive.assert_called_once_with(
+            summary_path=summary_file,
+            srt_path=srt_file,
+            llm_model="LiquidAI/lfm2.5-1.2b-instruct",
+            language="pt",
+            is_video=False,
+            is_gpu=False,
+        )
+
+
+def test_cli_md_target_with_explicit_srt_flag(tmp_path: Path) -> None:
+    summary_file = tmp_path / "video_resume.md"
+    summary_file.write_text("## Resumo geral\n- Resumo.\n")
+    custom_srt = tmp_path / "custom.srt"
+    custom_srt.write_text("1\n00:00:01,000 --> 00:00:03,000\nOi\n")
+
+    with patch("clerk.cli.run_interactive_session") as mock_interactive:
+        result = runner.invoke(app, [str(summary_file), "--srt", str(custom_srt)])
+        assert result.exit_code == 0
+        mock_interactive.assert_called_once_with(
+            summary_path=summary_file,
+            srt_path=custom_srt,
+            llm_model="LiquidAI/lfm2.5-1.2b-instruct",
+            language="pt",
+            is_video=True,
+            is_gpu=False,
+        )
+
+
+def test_cli_transcribe_only_and_interactive_mutually_exclusive(tmp_path: Path) -> None:
+    input_file = tmp_path / "sample.mp3"
+    input_file.write_text("mock audio content")
+
+    result = runner.invoke(app, [str(input_file), "--transcribe-only", "--interactive"])
+    assert result.exit_code == 1
+    assert "Cannot specify both --transcribe-only and --interactive options simultaneously" in result.output
+
+
+def test_cli_nonexistent_srt_flag_fails(tmp_path: Path) -> None:
+    summary_file = tmp_path / "reuniao_ata.md"
+    summary_file.write_text("## Contexto\n- Ata.\n")
+
+    result = runner.invoke(app, [str(summary_file), "--srt", str(tmp_path / "missing.srt")])
+    assert result.exit_code == 1
+    assert "SRT file does not exist" in result.output

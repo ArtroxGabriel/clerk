@@ -80,6 +80,9 @@ class ResolvedConfig:
     resume: bool
     force: bool
     verbose: bool
+    interactive: bool = False
+    interactive_only: bool = False
+    srt_path: Path | None = None
 
 
 def is_gpu_available() -> bool:
@@ -122,10 +125,16 @@ def _abort(message: str) -> NoReturn:
     raise typer.Exit(code=EXIT_ERROR)
 
 
-def _validate_target_path(target: str, is_url: bool, transcribe_only: bool, summarize_only: bool) -> bool:
-    """Validates local target path and auto-enables summarize_only for .srt inputs."""
+def _validate_target_path(
+    target: str,
+    is_url: bool,
+    transcribe_only: bool,
+    summarize_only: bool,
+    interactive: bool,
+) -> tuple[bool, bool, bool]:
+    """Validates local target path and auto-enables summarize_only (.srt) or interactive_only (.md)."""
     if is_url:
-        return summarize_only
+        return summarize_only, interactive, False
 
     local_path = Path(target)
     if not local_path.exists():
@@ -135,9 +144,22 @@ def _validate_target_path(target: str, is_url: bool, transcribe_only: bool, summ
         logger.error("Input path is not a file: %s", local_path)
         _abort(f"Error: Input path is not a file: {local_path}")
 
-    if local_path.suffix.lower() == ".srt" and not transcribe_only:
-        return True
-    return summarize_only
+    suffix = local_path.suffix.lower()
+    if suffix == ".md":
+        return summarize_only, True, True
+    if suffix == ".srt" and not transcribe_only:
+        return True, interactive, False
+    return summarize_only, interactive, False
+
+
+def _validate_srt_option(srt: Path | None) -> Path | None:
+    if srt is None:
+        return None
+    if not srt.exists():
+        _abort(f"Error: SRT file does not exist: {srt}")
+    if not srt.is_file():
+        _abort(f"Error: SRT path is not a file: {srt}")
+    return srt
 
 
 def resolve_cli_config(
@@ -165,6 +187,8 @@ def resolve_cli_config(
     force: bool,
     verbose: bool,
     gpu_supported: bool,
+    interactive: bool = False,
+    srt: Path | None = None,
 ) -> ResolvedConfig:
     """Validates CLI flags and resolves preset defaults into an immutable ResolvedConfig."""
     if not target or not target.strip():
@@ -179,6 +203,10 @@ def resolve_cli_config(
         _abort("Error: Cannot specify both --gpu and --fast options simultaneously.")
     if transcribe_only and summarize_only:
         _abort("Error: Cannot specify both --transcribe-only and --summarize-only options simultaneously.")
+    if transcribe_only and interactive:
+        _abort("Error: Cannot specify both --transcribe-only and --interactive options simultaneously.")
+
+    validated_srt = _validate_srt_option(srt)
 
     effective_custom_prompt = resolve_prompt_option(prompt, prompt_file, "prompt")
     effective_custom_consolidation_prompt = resolve_prompt_option(
@@ -240,8 +268,11 @@ def resolve_cli_config(
         )
 
     is_url = clean_target.startswith(("http://", "https://", "www.")) or "youtube.com" in clean_target or "youtu.be" in clean_target
-    eff_summarize_only = _validate_target_path(clean_target, is_url, transcribe_only, summarize_only)
-    is_video = True if video else (False if meeting else is_url)
+    eff_summarize_only, eff_interactive, eff_interactive_only = _validate_target_path(
+        clean_target, is_url, transcribe_only, summarize_only, interactive
+    )
+    inferred_video_from_md = eff_interactive_only and Path(clean_target).stem.endswith("_resume")
+    is_video = True if video else (False if meeting else (is_url or inferred_video_from_md))
 
     return ResolvedConfig(
         target=clean_target,
@@ -262,4 +293,7 @@ def resolve_cli_config(
         resume=resume,
         force=force,
         verbose=verbose,
+        interactive=eff_interactive,
+        interactive_only=eff_interactive_only,
+        srt_path=validated_srt,
     )
