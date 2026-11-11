@@ -9,17 +9,17 @@ The `interactive` and `srt_search` modules power **Clerk v3.0's interactive Ata 
 ```mermaid
 sequenceDiagram
     participant User as User (TUI)
-    participant Loop as run_interactive_session()
+    participant Session as run_interactive_session()
     participant Strategy as InteractiveStrategy (CPU / GPU)
-    participant SRT as srt_search.py (rg -> grep -> re)
+    participant SRT as srt_search.py (rg / grep / re)
     participant Ollama as OllamaBackend (/api/chat)
 
-    User->>Loop: Instruction or Question (e.g. "Gabriel owns the DB migration")
-    Loop->>Strategy: process_turn(user_message, current_ata, history, srt_path)
+    User->>Session: Instruction or Question (e.g. "Gabriel owns the DB migration")
+    Session->>Strategy: process_turn(user_message, current_ata, history, srt_path)
     alt CpuInteractiveStrategy (1.2B CPU models)
         Strategy->>SRT: search_srt_file(srt_path, extract_search_keywords(msg))
-        SRT-->>Strategy: Top SrtMatchWindow citations ([HH:MM:SS -> HH:MM:SS])
-        Strategy->>Ollama: chat(messages with <<<CURRENT_ATA>>> & <<<SRT_EXCERPTS>>>)
+        SRT-->>Strategy: Top SrtMatchWindow citations ([HH:MM:SS])
+        Strategy->>Ollama: chat(messages with CURRENT_ATA and SRT_EXCERPTS)
     else GpuInteractiveStrategy (GPU models with tool-calling)
         Strategy->>Ollama: chat(messages, tools=[SEARCH_SRT_TOOL])
         opt Model invokes search_srt(query)
@@ -31,14 +31,14 @@ sequenceDiagram
     end
     Ollama-->>Strategy: ChatResponse
     Strategy->>Strategy: merge_ata_sections(current_ata, response)
-    Strategy-->>Loop: InteractiveTurnResult(reply_text, updated_ata, srt_matches)
+    Strategy-->>Session: InteractiveTurnResult(reply_text, updated_ata, srt_matches)
     alt updated_ata is present
-        Loop->>User: Render unified diff (+ / -) & prompt (Accept / Discard / Adjust)
+        Session->>User: Render unified diff (+ / -) & prompt (Accept / Discard / Adjust)
         opt User selects Accept
-            Loop->>Loop: Push current_ata to undo_stack & write updated_ata to disk
+            Session->>Session: Push current_ata to undo_stack & write updated_ata to disk
         end
     else Conversational answer
-        Loop->>User: Render Rich response panel with SRT timestamp citations
+        Session->>User: Render Rich response panel with SRT timestamp citations
     end
 ```
 
