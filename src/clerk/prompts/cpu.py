@@ -24,15 +24,15 @@ RULES:
 
 OUTPUT FORMAT:
 ## Contexto
-- [meeting objective, general context, and mentioned areas/teams]
+* [meeting objective, general context, and mentioned areas/teams]
 ## Pauta e discussões
-- [topic discussed and key points raised]
+* [topic discussed and key points raised]
 ## Decisões
-- [decision or deliberation reached]
+* [decision or deliberation reached]
 ## Encaminhamentos
-- [action item and responsible person if mentioned]
+* [action item and responsible person if mentioned]
 ## Pendências
-- [open question or pending issue]""".strip()
+* [open question or pending issue]""".strip()
 
     VIDEO_PROMPT = """You are extracting a factual summary from the transcript of a video.
 
@@ -52,13 +52,13 @@ RULES:
 
 OUTPUT FORMAT:
 ## Resumo geral
-- [concise overview with key numbers/facts]
+* [concise overview with key numbers/facts]
 ## Principais tópicos
-- [key topic with specific data]
+* [key topic with specific data]
 ## Momentos importantes
-- [important moment, case study, or turning point]
+* [important moment, case study, or turning point]
 ## Conclusões ou mensagens finais
-- [final takeaway]""".strip()
+* [final takeaway]""".strip()
 
     CONSOLIDATE_PROMPT = """You are merging a list of extracted items for the category '{category}'.
 
@@ -76,7 +76,7 @@ RULES:
 - Do not output any section header (##); output only the bullet list in {language}. No preamble or explanation.
 
 OUTPUT FORMAT:
-- [consolidated item]""".strip()
+* [consolidated item]""".strip()
 
     REVIEW_PROMPT = """You are reconciling speech-to-text phonetic spelling errors in a list of extracted participant names and titles (with their occurrence counts).
 

@@ -56,4 +56,5 @@ nav:
       - Summarization & Ollama: modules/summarize.md
       - Audio Normalization: modules/audio.md
       - Pipeline Coordinator: modules/pipeline.md
+      - Interactive Refinement & SRT Search: modules/interactive.md
       - CLI Application: modules/cli.md

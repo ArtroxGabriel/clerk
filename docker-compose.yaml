@@ -1,23 +1,4 @@
 services:
-  app:
-    image: ghcr.io/artroxgabriel/clerk:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.cpu
-      args:
-        UID: "${UID:-1000}"
-        GID: "${GID:-1000}"
-    volumes:
-      - .:/workspace
-      - huggingface-cache:/home/app/.cache/huggingface
-    environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - ENABLE_GPU=false
-      - HF_HOME=/home/app/.cache/huggingface
-    depends_on:
-      ollama-pull-model:
-        condition: service_completed_successfully
-
   ollama:
     image: ollama/ollama:latest
     ports:
@@ -42,4 +23,3 @@ services:
 
 volumes:
   ollama-data:
-  huggingface-cache:

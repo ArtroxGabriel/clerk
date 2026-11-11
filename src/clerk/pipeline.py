@@ -145,7 +145,7 @@ def run_pipeline(
         logger.info("Starting summarization in %s...", effective_lang)
         t0 = time.perf_counter()
         summary_label = "video summary" if is_video else "meeting minutes (Ata)"
-        with step_spinner(f"Generating {summary_label} with {llm_model}..."):
+        with step_spinner(f"Generating {summary_label} with {llm_model}...") as update_spinner:
             summary = summarize_transcript(
                 transcript=plain_text_transcript,
                 model_name=llm_model,
@@ -153,6 +153,7 @@ def run_pipeline(
                 is_video=is_video,
                 custom_prompt=custom_prompt,
                 custom_consolidation_prompt=custom_consolidation_prompt,
+                progress_callback=update_spinner,
             )
 
         t_summarize = time.perf_counter() - t0
@@ -292,7 +293,7 @@ def run_pipeline(
     logger.info("Starting summarization in %s...", effective_lang)
     t0 = time.perf_counter()
     summary_label = "video summary" if is_video else "meeting minutes (Ata)"
-    with step_spinner(f"Generating {summary_label} with {llm_model}..."):
+    with step_spinner(f"Generating {summary_label} with {llm_model}...") as update_spinner:
         summary = summarize_transcript(
             transcript=plain_text_transcript,
             model_name=llm_model,
@@ -300,6 +301,7 @@ def run_pipeline(
             is_video=is_video,
             custom_prompt=custom_prompt,
             custom_consolidation_prompt=custom_consolidation_prompt,
+            progress_callback=update_spinner,
         )
 
     t_summarize = time.perf_counter() - t0

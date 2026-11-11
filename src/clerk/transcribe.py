@@ -178,7 +178,12 @@ def transcribe_file(
             "duration_after_vad": info.duration_after_vad,
         }
     finally:
-        # Release CTranslate2 model from VRAM before LLM stage runs on 6GB GPUs
+        # Explicitly unload CTranslate2 weights from VRAM before LLM stage runs on 6GB GPUs
+        if hasattr(model, "model") and hasattr(model.model, "unload_model"):
+            try:
+                model.model.unload_model(to_cpu=False)
+            except Exception as err:
+                logger.debug("Failed to explicitly unload CTranslate2 model: %s", err)
         del batched_model
         del model
         gc.collect()

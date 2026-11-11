@@ -214,6 +214,7 @@ def test_transcribe_releases_vram_via_gc_collect(tmp_path: Path) -> None:
         patch("clerk.transcribe.gc.collect") as mock_gc,
     ):
         transcribe_file(audio_path, device="cuda")
+        mock_model_instance.model.unload_model.assert_called_once_with(to_cpu=False)
         mock_gc.assert_called_once()
 
 

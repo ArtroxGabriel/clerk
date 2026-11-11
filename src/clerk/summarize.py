@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from .backends import (
@@ -124,7 +125,19 @@ def get_summary_config(is_video: bool) -> SummaryConfig:
 
 
 def format_empty_fallback(section: str, primary_section: str) -> str:
-    return f"- Nenhum {section.lower()} registrado." if section == primary_section else "- Nenhuma registrada."
+    return f"* Nenhum {section.lower()} registrado." if section == primary_section else "* Nenhuma registrada."
+
+
+def normalize_markdown_bullets(text: str) -> str:
+    """Normalizes leading `- ` or numbered markdown list markers to `* ` outside headers."""
+    lines: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            lines.append(line)
+            continue
+        lines.append(re.sub(r"^(\s*)(?:[-+]|\d+\.)\s+", r"\1* ", line))
+    return "\n".join(lines)
 
 
 def unload_ollama_model(
@@ -210,11 +223,15 @@ def _process_chunks(
     lang_name: str,
     is_video: bool,
     config: SummaryConfig,
+    model_name: str = DEFAULT_LLM_MODEL,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> dict[str, list[str]]:
     """Generates and parses section items for each transcript chunk."""
     combined_sections: dict[str, list[str]] = {sec: [] for sec in config.sections}
     for i, chunk in enumerate(chunks):
         logger.info("Summarizing chunk %d/%d...", i + 1, len(chunks))
+        if progress_callback:
+            progress_callback(f"Summarizing chunk {i + 1}/{len(chunks)} with {model_name}...")
         prompt = prompt_strategy.build_summary_prompt(
             transcript=chunk,
             language=lang_name,
@@ -235,24 +252,29 @@ def _consolidate_sections(
     backend: LLMBackend,
     lang_name: str,
     config: SummaryConfig,
+    model_name: str = DEFAULT_LLM_MODEL,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> str:
     """Consolidates accumulated section items into structured markdown."""
     logger.info("Consolidating section summaries...")
     summaries: dict[str, str] = {}
-    for sec in config.sections:
+    for idx, sec in enumerate(config.sections, start=1):
         items = combined_sections.get(sec, [])
         if not items:
             summaries[sec] = format_empty_fallback(sec, config.primary_section)
             continue
 
-        items_text = "\n".join(f"- {item}" for item in items)
+        if progress_callback:
+            progress_callback(f"Consolidating section {idx}/{len(config.sections)} ({sec}) with {model_name}...")
+        items_text = "\n".join(f"* {item}" for item in items)
         prompt = prompt_strategy.build_consolidation_prompt(
             category=sec,
             items=items_text,
             language=lang_name,
         )
         content = backend.generate(prompt)
-        summaries[sec] = content or format_empty_fallback(sec, config.primary_section)
+        normalized_content = normalize_markdown_bullets(content) if content else ""
+        summaries[sec] = normalized_content or format_empty_fallback(sec, config.primary_section)
 
     return "\n\n".join(f"## {sec}\n{summaries[sec]}" for sec in config.sections).strip()
 
@@ -281,9 +303,13 @@ def _review_consolidated_summary(
     prompt_strategy: PromptStrategy,
     backend: LLMBackend,
     lang_name: str,
+    model_name: str = DEFAULT_LLM_MODEL,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> str:
     """Extracts phonetic entity replacement pairs via LLM and applies them across the draft."""
     logger.info("Reviewing consolidated summary for entity consistency...")
+    if progress_callback:
+        progress_callback(f"Reviewing entity consistency with {model_name}...")
     candidates = _extract_candidate_entities(f"{transcript}\n{draft}")
     prompt = prompt_strategy.build_review_prompt(draft=candidates or draft, language=lang_name)
     mapping_output = backend.generate(prompt)
@@ -320,6 +346,7 @@ def summarize_transcript(
     custom_prompt: str | None = None,
     custom_consolidation_prompt: str | None = None,
     backend: LLMBackend | None = None,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> str:
     """Generates structured summary for a transcript using an LLM backend."""
     cleaned_transcript = clean_srt_for_prompt(transcript)
@@ -357,7 +384,7 @@ def summarize_transcript(
             )
             content = active_backend.generate(prompt)
             if content:
-                return content
+                return normalize_markdown_bullets(content)
             logger.error("LLM backend returned empty response")
             raise RuntimeError("empty summary")
 
@@ -367,8 +394,14 @@ def summarize_transcript(
             max_words_per_chunk,
         )
         chunks = split_transcript_smart(cleaned_transcript, max_words_per_chunk)
-        combined_sections = _process_chunks(chunks, prompt_strategy, active_backend, lang_name, is_video, config)
-        draft = _consolidate_sections(combined_sections, prompt_strategy, active_backend, lang_name, config)
-        return _review_consolidated_summary(draft, cleaned_transcript, prompt_strategy, active_backend, lang_name)
+        combined_sections = _process_chunks(
+            chunks, prompt_strategy, active_backend, lang_name, is_video, config, model_name, progress_callback
+        )
+        draft = _consolidate_sections(
+            combined_sections, prompt_strategy, active_backend, lang_name, config, model_name, progress_callback
+        )
+        return _review_consolidated_summary(
+            draft, cleaned_transcript, prompt_strategy, active_backend, lang_name, model_name, progress_callback
+        )
     finally:
         active_backend.cleanup()
