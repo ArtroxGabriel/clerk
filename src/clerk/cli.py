@@ -19,14 +19,19 @@ from .config import (
     ResolvedConfig,
     is_gpu_available,
     resolve_cli_config,
-    resolve_prompt_option,
 )
 from .pipeline import run_pipeline
+from .ui import (
+    format_time_hhmmssmm,
+    prompt_recovery_menu,
+    render_config_panel,
+    render_markdown_preview,
+    render_startup_banner,
+    render_status_summary,
+)
 
 app = typer.Typer(add_completion=False)
 logger = logging.getLogger(__name__)
-
-_resolve_prompt_option = resolve_prompt_option
 
 __all__ = [
     "EXIT_ERROR",
@@ -54,14 +59,6 @@ def configure_logging(verbose: bool) -> None:
         logging.getLogger("faster_whisper").setLevel(logging.DEBUG)
 
 
-def format_time_hhmmssmm(seconds: float) -> str:
-    total_cs = round(seconds * 100)
-    hours, rem = divmod(total_cs, 360_000)
-    mins, rem = divmod(rem, 6000)
-    secs, cs = divmod(rem, 100)
-    return f"{hours:02d}:{mins:02d}:{secs:02d}:{cs:02d}"
-
-
 def print_pipeline_status(
     transcript_path: Path | None,
     summary_path: Path | None,
@@ -69,80 +66,17 @@ def print_pipeline_status(
     metadata: dict,
     verbose: bool,
 ) -> None:
-    timings = metadata.get("timings", {})
-    models = metadata.get("models", {})
-    word_counts = metadata.get("word_counts", {})
-    output_files = metadata.get("output_files", {})
-    metadata_file = output_files.get("metadata_path", str(output_dir / "transcript_metadata.json"))
-
-    transcript_display = str(transcript_path) if transcript_path else "N/A (skipped)"
-    summary_display = str(summary_path) if summary_path else "N/A (skipped)"
-
-    typer.echo("\n==================================================")
-    typer.echo("                 Pipeline Status                  ")
-    typer.echo("==================================================")
-    typer.echo("📁 Output Paths:")
-    typer.echo(f"  • Transcript (SRT) : {transcript_display}")
-    typer.echo(f"  • Summary          : {summary_display}")
-    typer.echo(f"  • Metadata JSON    : {metadata_file}")
-
-    typer.echo("\n🤖 Models Used:")
-    whisper_model = models.get("whisper_model")
-    if whisper_model == "skipped":
-        typer.echo("  • Whisper          : Skipped")
-    else:
-        typer.echo(
-            f"  • Whisper          : {whisper_model} "
-            f"(device: {models.get('whisper_device')}, compute: {models.get('whisper_compute_type')}, batch_size: {models.get('whisper_batch_size')})"
-        )
-    llm_model = models.get("llm_model")
-    if llm_model == "skipped":
-        typer.echo("  • LLM              : Skipped")
-    else:
-        typer.echo(f"  • LLM              : {llm_model}")
-
-    typer.echo("\n⏱️ Execution Time:")
-    typer.echo(f"  • Total Time       : {format_time_hhmmssmm(float(timings.get('total_seconds', 0.0)))}")
-    if verbose:
-        typer.echo(f"    - Audio Extract  : {format_time_hhmmssmm(float(timings.get('audio_extraction_seconds', 0.0)))}")
-        typer.echo(f"    - Transcription  : {format_time_hhmmssmm(float(timings.get('transcription_seconds', 0.0)))}")
-        typer.echo(f"    - Summarization  : {format_time_hhmmssmm(float(timings.get('summarization_seconds', 0.0)))}")
-
-    typer.echo("\n📊 Audio & Content Metrics:")
-    lang_prob = metadata.get("language_probability")
-    prob_str = f" ({lang_prob:.0%})" if lang_prob is not None else ""
-    typer.echo(f"  • Language         : {metadata.get('language')}{prob_str}")
-    duration = float(metadata.get("duration", 0.0))
-    speech_duration = float(metadata.get("duration_after_vad", 0.0))
-    typer.echo(
-        f"  • Audio Duration   : {format_time_hhmmssmm(duration)} "
-        f"(Speech: {format_time_hhmmssmm(speech_duration)})"
+    render_status_summary(
+        transcript_path=transcript_path,
+        summary_path=summary_path,
+        output_dir=output_dir,
+        metadata=metadata,
+        verbose=verbose,
     )
-    typer.echo(
-        f"  • Word Counts      : Transcript ({word_counts.get('transcript_words', 0)} words) -> Summary ({word_counts.get('summary_words', 0)} words)"
-    )
-    typer.echo("==================================================\n")
 
 
 def _print_verbose_config(cfg: ResolvedConfig) -> None:
-    typer.echo("\n--- Configuration ---")
-    typer.echo(f"  Target: {cfg.target}")
-    typer.echo(f"  Output Dir: {cfg.output_dir}")
-    typer.echo(f"  Preset: {cfg.selected_preset}")
-    typer.echo(f"  Whisper Model: {cfg.whisper_model}")
-    typer.echo(f"  Whisper Device: {cfg.whisper_device}")
-    typer.echo(f"  Whisper Compute Type: {cfg.whisper_compute_type}")
-    typer.echo(f"  Whisper Batch Size: {cfg.whisper_batch_size}")
-    typer.echo(f"  LLM Model: {cfg.llm_model}")
-    typer.echo(f"  Language: {cfg.language}")
-    typer.echo(f"  Mode: {'Video' if cfg.is_video else 'Meeting'}")
-    typer.echo(f"  Resume: {cfg.resume}")
-    typer.echo(f"  Force: {cfg.force}")
-    if cfg.transcribe_only:
-        typer.echo("  Step: Transcribe Only")
-    elif cfg.summarize_only:
-        typer.echo("  Step: Summarize Only")
-    typer.echo("---------------------\n")
+    render_config_panel(cfg)
     logger.debug(
         "Resolved config: target=%s, output_dir=%s, preset=%s, whisper_model=%s, whisper_device=%s, "
         "whisper_compute_type=%s, whisper_batch_size=%d, llm_model=%s, language=%s, is_video=%s, "
@@ -164,6 +98,25 @@ def _print_verbose_config(cfg: ResolvedConfig) -> None:
     )
 
 
+def _prepare_input_target(cfg: ResolvedConfig) -> tuple[Path, Path | None, bool]:
+    """Resolve input media target or download YouTube media."""
+    if not cfg.is_url:
+        return Path(cfg.target), None, cfg.summarize_only
+
+    t0 = time.perf_counter()
+    sub_file = None if (cfg.force or cfg.transcribe_only) else download_youtube_subtitles(cfg.target, language=cfg.language)
+    if sub_file and sub_file.exists():
+        logger.info("YouTube subtitles fetched in %.2fs (skipping Whisper)", time.perf_counter() - t0)
+        cfg.output_dir.mkdir(parents=True, exist_ok=True)
+        persisted_srt = cfg.output_dir / sub_file.name
+        shutil.copy2(sub_file, persisted_srt)
+        return persisted_srt, sub_file, True
+
+    temp_file = download_youtube_audio(cfg.target)
+    logger.info("YouTube audio download completed in %.2fs", time.perf_counter() - t0)
+    return temp_file, temp_file, cfg.summarize_only
+
+
 def _prompt_pipeline_recovery(
     error: Exception,
     current_llm: str,
@@ -172,47 +125,67 @@ def _prompt_pipeline_recovery(
     current_device: str,
 ) -> tuple[str, str, str, str, bool]:
     """Displays interactive recovery options on pipeline error. Returns updated configs and retry flag."""
-    import sys
+    return prompt_recovery_menu(
+        error=error,
+        current_llm=current_llm,
+        current_whisper=current_whisper,
+        current_compute=current_compute,
+        current_device=current_device,
+    )
 
-    if not sys.stdin.isatty():
-        return current_llm, current_whisper, current_compute, current_device, False
 
-    typer.echo(f"\n⚠️  Pipeline error: {error}", err=True)
-    if "libcublas" in str(error).lower():
-        typer.echo(
-            "💡 Missing CUDA runtime libraries. Install CUDA dependencies with:\n"
-            "   uv sync --extra cuda\n",
-            err=True,
-        )
-    typer.echo("Model or pipeline failure detected. Choose recovery option:", err=True)
-    typer.echo(f"  [1] Enter a new LLM model name (current: {current_llm})")
-    typer.echo(f"  [2] Enter a new Whisper model name (current: {current_whisper})")
-    typer.echo(f"  [3] Change Whisper compute type (current: {current_compute})")
-    typer.echo(f"  [4] Change Whisper device (current: {current_device})")
-    typer.echo("  [5] Retry pipeline with current configuration")
-    typer.echo("  [6] Exit")
+def _run_pipeline_with_recovery(
+    input_path: Path,
+    cfg: ResolvedConfig,
+    effective_summarize_only: bool,
+) -> tuple[Path | None, Path | None, dict]:
+    """Execute pipeline with interactive recovery retry loop."""
+    effective_llm = cfg.llm_model
+    effective_whisper = cfg.whisper_model
+    effective_compute = cfg.whisper_compute_type
+    effective_device = cfg.whisper_device
+    effective_resume = cfg.resume
 
-    choice = typer.prompt("Select option [1-6]", default="6")
-    if choice == "1":
-        new_llm = typer.prompt("Enter new LLM model name").strip()
-        if new_llm:
-            return new_llm, current_whisper, current_compute, current_device, True
-    elif choice == "2":
-        new_whisper = typer.prompt("Enter new Whisper model name").strip()
-        if new_whisper:
-            return current_llm, new_whisper, current_compute, current_device, True
-    elif choice == "3":
-        new_compute = typer.prompt("Enter new Whisper compute type (e.g. int8, float32, default)").strip()
-        if new_compute:
-            return current_llm, current_whisper, new_compute, current_device, True
-    elif choice == "4":
-        new_dev = typer.prompt("Enter new Whisper device (e.g. cpu, cuda)").strip()
-        if new_dev:
-            return current_llm, current_whisper, current_compute, new_dev, True
-    elif choice == "5":
-        return current_llm, current_whisper, current_compute, current_device, True
-
-    return current_llm, current_whisper, current_compute, current_device, False
+    while True:
+        try:
+            return run_pipeline(
+                input_path=input_path,
+                output_dir=cfg.output_dir,
+                whisper_model=effective_whisper,
+                whisper_device=effective_device,
+                whisper_compute_type=effective_compute,
+                llm_model=effective_llm,
+                language=cfg.language,
+                whisper_batch_size=cfg.whisper_batch_size,
+                is_video=cfg.is_video,
+                verbose=cfg.verbose,
+                transcribe_only=cfg.transcribe_only,
+                summarize_only=effective_summarize_only,
+                custom_prompt=cfg.custom_prompt,
+                custom_consolidation_prompt=cfg.custom_consolidation_prompt,
+                resume=effective_resume,
+            )
+        except (KeyboardInterrupt, typer.Exit):
+            raise
+        except Exception as e:
+            (
+                effective_llm,
+                effective_whisper,
+                effective_compute,
+                effective_device,
+                retry,
+            ) = _prompt_pipeline_recovery(
+                error=e,
+                current_llm=effective_llm,
+                current_whisper=effective_whisper,
+                current_compute=effective_compute,
+                current_device=effective_device,
+            )
+            if retry:
+                effective_resume = True
+                continue
+            logger.exception("Pipeline execution failed")
+            raise typer.Exit(code=EXIT_ERROR) from e
 
 
 @app.command()
@@ -307,78 +280,25 @@ def main(
         gpu_supported=is_gpu_available(),
     )
 
+    render_startup_banner(
+        target=cfg.target,
+        preset=cfg.selected_preset,
+        whisper_model=cfg.whisper_model,
+        llm_model=cfg.llm_model,
+        device=cfg.whisper_device,
+    )
+
     if cfg.verbose:
         _print_verbose_config(cfg)
 
     temp_file: Path | None = None
-    effective_resume = cfg.resume
-    effective_summarize_only = cfg.summarize_only
-    effective_llm = cfg.llm_model
-    effective_whisper = cfg.whisper_model
-    effective_compute = cfg.whisper_compute_type
-    effective_device = cfg.whisper_device
-
     try:
-        if cfg.is_url:
-            t0 = time.perf_counter()
-            sub_file = None if (cfg.force or cfg.transcribe_only) else download_youtube_subtitles(cfg.target, language=cfg.language)
-            if sub_file and sub_file.exists():
-                logger.info("YouTube subtitles fetched in %.2fs (skipping Whisper)", time.perf_counter() - t0)
-                temp_file = sub_file
-                cfg.output_dir.mkdir(parents=True, exist_ok=True)
-                persisted_srt = cfg.output_dir / sub_file.name
-                shutil.copy2(sub_file, persisted_srt)
-                input_path = persisted_srt
-                effective_summarize_only = True
-            else:
-                temp_file = download_youtube_audio(cfg.target)
-                logger.info("YouTube audio download completed in %.2fs", time.perf_counter() - t0)
-                input_path = temp_file
-        else:
-            input_path = Path(cfg.target)
-
-        while True:
-            try:
-                transcript_path, summary_path, metadata = run_pipeline(
-                    input_path=input_path,
-                    output_dir=cfg.output_dir,
-                    whisper_model=effective_whisper,
-                    whisper_device=effective_device,
-                    whisper_compute_type=effective_compute,
-                    llm_model=effective_llm,
-                    language=cfg.language,
-                    whisper_batch_size=cfg.whisper_batch_size,
-                    is_video=cfg.is_video,
-                    verbose=cfg.verbose,
-                    transcribe_only=cfg.transcribe_only,
-                    summarize_only=effective_summarize_only,
-                    custom_prompt=cfg.custom_prompt,
-                    custom_consolidation_prompt=cfg.custom_consolidation_prompt,
-                    resume=effective_resume,
-                )
-                break
-            except (KeyboardInterrupt, typer.Exit):
-                raise
-            except Exception as e:
-                (
-                    effective_llm,
-                    effective_whisper,
-                    effective_compute,
-                    effective_device,
-                    retry,
-                ) = _prompt_pipeline_recovery(
-                    error=e,
-                    current_llm=effective_llm,
-                    current_whisper=effective_whisper,
-                    current_compute=effective_compute,
-                    current_device=effective_device,
-                )
-                if retry:
-                    effective_resume = True
-                    continue
-                logger.exception("Pipeline execution failed")
-                raise typer.Exit(code=EXIT_ERROR) from e
-
+        input_path, temp_file, effective_summarize_only = _prepare_input_target(cfg)
+        transcript_path, summary_path, metadata = _run_pipeline_with_recovery(
+            input_path=input_path,
+            cfg=cfg,
+            effective_summarize_only=effective_summarize_only,
+        )
         print_pipeline_status(
             transcript_path=transcript_path,
             summary_path=summary_path,
@@ -386,6 +306,11 @@ def main(
             metadata=metadata,
             verbose=cfg.verbose,
         )
+        if summary_path and summary_path.exists():
+            render_markdown_preview(
+                markdown_content=summary_path.read_text(encoding="utf-8"),
+                title=summary_path.name,
+            )
     except KeyboardInterrupt as err:
         typer.echo("\nProcess interrupted by user. Exiting...", err=True)
         raise typer.Exit(code=EXIT_INTERRUPTED) from err

@@ -423,6 +423,33 @@ def test_prompt_pipeline_recovery_interactive() -> None:
         assert retry is False
         assert llm == "llm1"
 
+
+def test_cli_startup_banner_rendered(tmp_path: Path) -> None:
+    input_file = tmp_path / "sample.mp3"
+    input_file.write_text("mock audio content")
+    mock_res_meta = {"timings": {}, "models": {}, "word_counts": {}}
+
+    with patch("clerk.cli.run_pipeline", return_value=(Path("out/transcript.srt"), Path("out/meeting_points.md"), mock_res_meta)):
+        result = runner.invoke(app, ["--target", str(input_file)])
+        assert result.exit_code == 0
+        clean_out = _clean_output(result.output)
+        assert "clerk v2.0.0" in clean_out
+
+
+def test_cli_summary_markdown_preview(tmp_path: Path) -> None:
+    input_file = tmp_path / "sample.mp3"
+    input_file.write_text("mock audio content")
+    summary_file = tmp_path / "meeting_points.md"
+    summary_file.write_text("# Contexto\nResumo da reunião executiva.\n")
+    mock_res_meta = {"timings": {}, "models": {}, "word_counts": {}}
+
+    with patch("clerk.cli.run_pipeline", return_value=(Path("out/transcript.srt"), summary_file, mock_res_meta)):
+        result = runner.invoke(app, ["--target", str(input_file)])
+        assert result.exit_code == 0
+        clean_out = _clean_output(result.output)
+        assert "meeting_points.md" in clean_out
+        assert "Resumo da reunião executiva" in clean_out
+
 def test_cli_custom_prompt_flags(tmp_path: Path) -> None:
     input_file = tmp_path / "sample.mp3"
     input_file.write_text("mock audio content")

@@ -9,6 +9,7 @@ from .audio import extract_audio
 from .prompts import clean_srt_for_prompt
 from .summarize import summarize_transcript
 from .transcribe import transcribe_file
+from .ui import step_spinner
 
 logger = logging.getLogger(__name__)
 
@@ -143,14 +144,15 @@ def run_pipeline(
 
         logger.info("Starting summarization in %s...", effective_lang)
         t0 = time.perf_counter()
-        summary = summarize_transcript(
-            transcript=plain_text_transcript,
-            model_name=llm_model,
-            language=effective_lang,
-            is_video=is_video,
-            custom_prompt=custom_prompt,
-            custom_consolidation_prompt=custom_consolidation_prompt,
-        )
+        with step_spinner(f"Generating summary with {llm_model}..."):
+            summary = summarize_transcript(
+                transcript=plain_text_transcript,
+                model_name=llm_model,
+                language=effective_lang,
+                is_video=is_video,
+                custom_prompt=custom_prompt,
+                custom_consolidation_prompt=custom_consolidation_prompt,
+            )
 
         t_summarize = time.perf_counter() - t0
         t_total = time.perf_counter() - t_start
@@ -211,21 +213,23 @@ def run_pipeline(
         else:
             logger.info("Starting audio extraction from %s...", input_path)
             t0 = time.perf_counter()
-            normalized_audio = extract_audio(input_path, audio_path)
+            with step_spinner(f"Normalizing audio from {input_path.name}..."):
+                normalized_audio = extract_audio(input_path, audio_path)
             t_audio = time.perf_counter() - t0
             logger.info("Audio extraction completed in %.2fs", t_audio)
 
         logger.info("Starting transcription...")
         t0 = time.perf_counter()
-        plain_text_transcript, srt_transcript, metadata = transcribe_file(
-            normalized_audio,
-            model_name=whisper_model,
-            device=whisper_device,
-            compute_type=whisper_compute_type,
-            language=language,
-            batch_size=whisper_batch_size,
-            verbose=verbose,
-        )
+        with step_spinner(f"Transcribing audio with Whisper ({whisper_model})..."):
+            plain_text_transcript, srt_transcript, metadata = transcribe_file(
+                normalized_audio,
+                model_name=whisper_model,
+                device=whisper_device,
+                compute_type=whisper_compute_type,
+                language=language,
+                batch_size=whisper_batch_size,
+                verbose=verbose,
+            )
         t_transcribe = time.perf_counter() - t0
         logger.info("Transcription completed in %.2fs", t_transcribe)
 
@@ -284,14 +288,15 @@ def run_pipeline(
 
     logger.info("Starting summarization in %s...", effective_lang)
     t0 = time.perf_counter()
-    summary = summarize_transcript(
-        transcript=plain_text_transcript,
-        model_name=llm_model,
-        language=effective_lang,
-        is_video=is_video,
-        custom_prompt=custom_prompt,
-        custom_consolidation_prompt=custom_consolidation_prompt,
-    )
+    with step_spinner(f"Generating summary with {llm_model}..."):
+        summary = summarize_transcript(
+            transcript=plain_text_transcript,
+            model_name=llm_model,
+            language=effective_lang,
+            is_video=is_video,
+            custom_prompt=custom_prompt,
+            custom_consolidation_prompt=custom_consolidation_prompt,
+        )
 
     t_summarize = time.perf_counter() - t0
     t_total = time.perf_counter() - t_start
