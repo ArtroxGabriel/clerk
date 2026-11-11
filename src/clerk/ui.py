@@ -22,7 +22,7 @@ from rich.table import Table
 from rich.text import Text
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Callable, Generator
 
     from .config import ResolvedConfig
     from .srt_search import SrtMatchWindow
@@ -276,16 +276,16 @@ def render_markdown_preview(markdown_content: str, title: str = "Generated Summa
 
 
 @contextlib.contextmanager
-def step_spinner(status_text: str, console: Console | None = None) -> Generator[None]:
+def step_spinner(status_text: str, console: Console | None = None) -> Generator[Callable[[str], None]]:
     """Context manager showing a live rich spinner during pipeline step execution.
 
     Example:
-        >>> with step_spinner("Extracting audio..."):
-        ...     perform_task()
+        >>> with step_spinner("Extracting audio...") as update_status:
+        ...     update_status("Step 1/2...")
     """
     out = console or get_console()
-    with out.status(f"[bold cyan]{status_text}[/bold cyan]", spinner="dots"):
-        yield
+    with out.status(f"[bold cyan]{status_text}[/bold cyan]", spinner="dots") as status:
+        yield lambda msg: status.update(f"[bold cyan]{msg}[/bold cyan]")
 
 
 RECOVERY_DISPATCH: dict[str, tuple[str, int]] = {

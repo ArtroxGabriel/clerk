@@ -436,3 +436,11 @@ def test_prompt_edit_confirmation_interactive_and_fallback(mock_select: MagicMoc
 
     mock_select.return_value.ask.return_value = None
     assert prompt_edit_confirmation("meeting_ata.md", is_interactive=True) == "discard"
+
+
+def test_step_spinner_yields_status_updater() -> None:
+    buf = io.StringIO()
+    test_console = Console(file=buf, force_terminal=True, width=100)
+    with step_spinner("Initial status...", console=test_console) as update_status:
+        assert callable(update_status)
+        update_status("Updated step 1/3...")

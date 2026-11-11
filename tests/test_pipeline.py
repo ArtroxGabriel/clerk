@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import pytest
 
@@ -52,6 +52,7 @@ def test_run_pipeline(tmp_path: Path) -> None:
             is_video=False,
             custom_prompt=None,
             custom_consolidation_prompt=None,
+            progress_callback=ANY,
         )
 
 
@@ -152,6 +153,7 @@ def test_run_pipeline_summarize_only(tmp_path: Path) -> None:
             is_video=False,
             custom_prompt=None,
             custom_consolidation_prompt=None,
+            progress_callback=ANY,
         )
 
         assert tx_path == srt_path
@@ -192,6 +194,7 @@ def test_run_pipeline_summarize_only_media_file(tmp_path: Path) -> None:
             is_video=False,
             custom_prompt=None,
             custom_consolidation_prompt=None,
+            progress_callback=ANY,
         )
 
 
@@ -279,6 +282,7 @@ def test_run_pipeline_resume_with_existing_transcript(tmp_path: Path) -> None:
             is_video=False,
             custom_prompt=None,
             custom_consolidation_prompt=None,
+            progress_callback=ANY,
         )
         assert tx_path == srt_path
         assert sum_path == output_dir / "resume_test_ata.md"
@@ -387,6 +391,7 @@ def test_run_pipeline_auto_language_alignment(tmp_path: Path) -> None:
             is_video=False,
             custom_prompt=None,
             custom_consolidation_prompt=None,
+            progress_callback=ANY,
         )
         assert metadata_res["language"] == "en"
 

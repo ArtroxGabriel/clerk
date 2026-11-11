@@ -369,3 +369,19 @@ def test_summarize_cleans_up_backend_on_error() -> None:
     assert failing_backend.cleaned_up is True
 
 
+
+
+def test_summarize_multi_chunk_reports_progress_updates() -> None:
+    long_transcript = "Esta é uma frase longa. " * 20
+    updates: list[str] = []
+    fake_backend = FakeLLMBackend("## Contexto\n- Ponto")
+
+    summarize_transcript(
+        long_transcript,
+        max_words_per_chunk=15,
+        backend=fake_backend,
+        progress_callback=updates.append,
+    )
+
+    assert any("chunk 1/" in u.lower() for u in updates)
+    assert any("Contexto" in u for u in updates)
