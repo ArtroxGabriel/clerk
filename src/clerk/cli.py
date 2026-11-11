@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 import typer
+from rich.logging import RichHandler
 
 from .audio import download_youtube_audio, download_youtube_subtitles
 from .config import (
@@ -23,6 +24,7 @@ from .config import (
 from .pipeline import run_pipeline
 from .ui import (
     format_time_hhmmssmm,
+    get_console,
     prompt_recovery_menu,
     render_config_panel,
     render_markdown_preview,
@@ -50,13 +52,28 @@ __all__ = [
 
 
 def configure_logging(verbose: bool) -> None:
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s %(levelname)s %(name)s - %(message)s",
-    )
+    """Configure unified logging with RichHandler to match TUI presentation."""
+    console = get_console()
     if verbose:
+        handler = RichHandler(
+            console=console,
+            show_time=True,
+            show_path=False,
+            markup=True,
+            rich_tracebacks=True,
+        )
+        logging.basicConfig(level=logging.DEBUG, handlers=[handler], format="%(message)s", force=True)
         logging.getLogger("faster_whisper").setLevel(logging.DEBUG)
+    else:
+        handler = RichHandler(
+            console=console,
+            show_time=False,
+            show_path=False,
+            markup=True,
+        )
+        logging.basicConfig(level=logging.WARNING, handlers=[handler], format="%(message)s", force=True)
+        for logger_name in ("clerk", "httpx", "httpcore", "faster_whisper", "urllib3"):
+            logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 
 def print_pipeline_status(

@@ -8,8 +8,10 @@ from rich.console import Console
 
 from clerk.config import ResolvedConfig
 from clerk.ui import (
+    create_transcription_progress,
     get_console,
     get_err_console,
+    print_step_complete,
     prompt_recovery_menu,
     render_config_panel,
     render_markdown_preview,
@@ -339,3 +341,22 @@ def test_prompt_recovery_menu_options(mock_text: MagicMock, mock_select: MagicMo
         console=test_console,
     )
     assert retry is False
+
+
+def test_create_transcription_progress() -> None:
+    buf = io.StringIO()
+    test_console = Console(file=buf, force_terminal=True, width=100)
+    with create_transcription_progress(console=test_console) as progress:
+        task = progress.add_task("test", total=10.0, model="tiny")
+        progress.update(task, completed=5.0)
+    output = buf.getvalue()
+    assert "Transcribing with Whisper" in output or "tiny" in output
+
+
+def test_print_step_complete() -> None:
+    buf = io.StringIO()
+    test_console = Console(file=buf, force_terminal=True, width=100)
+    print_step_complete("Transcription completed", elapsed=12.34, console=test_console)
+    output = buf.getvalue()
+    assert "Transcription completed" in output
+    assert "00:00:12:34" in output
