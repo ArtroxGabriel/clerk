@@ -68,6 +68,7 @@ def test_render_startup_banner() -> None:
 
     output = buf.getvalue()
     assert "clerk" in output
+    assert "v3.0.0" in output
     assert "sample.mp4" in output
     assert "large-v3-turbo" in output
     assert "gemma4:e2b" in output

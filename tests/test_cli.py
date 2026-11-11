@@ -276,7 +276,10 @@ def test_cli_gpu_disabled_in_cpu_mode(tmp_path: Path) -> None:
         assert "--whisper-device cuda' was specified, but GPU execution is disabled or unavailable in CPU mode" in result_device.output
 
 
-def test_cli_warns_when_running_cpu_in_gpu_container(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cli_does_not_warn_container_when_running_cpu_with_enable_gpu(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import clerk
+
+    assert clerk.__version__ == "3.0.0"
     input_file = tmp_path / "sample.mp3"
     input_file.write_text("mock audio content")
     monkeypatch.setenv("ENABLE_GPU", "true")
@@ -286,7 +289,7 @@ def test_cli_warns_when_running_cpu_in_gpu_container(tmp_path: Path, monkeypatch
          patch("clerk.cli.run_pipeline", return_value=(Path("out.srt"), Path("out.md"), mock_res_meta)):
         result = runner.invoke(app, ["--target", str(input_file), "--preset", "cpu"])
         assert result.exit_code == 0
-        assert "Warning: Running in CPU mode inside a GPU-enabled container" in result.output
+        assert "Warning: Running in CPU mode inside a GPU-enabled container" not in result.output
 
 
 def test_cli_meeting_flag(tmp_path: Path) -> None:
@@ -433,7 +436,7 @@ def test_cli_startup_banner_rendered(tmp_path: Path) -> None:
         result = runner.invoke(app, ["--target", str(input_file)])
         assert result.exit_code == 0
         clean_out = _clean_output(result.output)
-        assert "clerk v2.0.0" in clean_out
+        assert "clerk v3.0.0" in clean_out
 
 
 def test_cli_summary_markdown_preview(tmp_path: Path) -> None:

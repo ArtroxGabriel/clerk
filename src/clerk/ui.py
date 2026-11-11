@@ -98,7 +98,7 @@ def render_startup_banner(
 
     banner = Panel(
         content,
-        title="[bold magenta]⚡ clerk[/bold magenta] [dim]v2.0.0[/dim]",
+        title="[bold magenta]⚡ clerk[/bold magenta] [dim]v3.0.0[/dim]",
         subtitle="[dim]transcription & summarization pipeline[/dim]",
         border_style="magenta",
         padding=(1, 2),

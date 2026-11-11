@@ -223,16 +223,6 @@ def resolve_cli_config(
     if eff_whisper_device.lower() in ("cuda", "gpu") and not gpu_supported:
         _abort("Error: '--whisper-device cuda' was specified, but GPU execution is disabled or unavailable in CPU mode.")
 
-    env_gpu = os.environ.get("ENABLE_GPU", "").strip().lower()
-    if env_gpu in ("true", "1", "yes", "on", "enable", "enabled") and (
-        selected_preset in ("cpu", "fast") or eff_whisper_device.lower() == "cpu"
-    ):
-        typer.echo(
-            "Warning: Running in CPU mode inside a GPU-enabled container. "
-            "For CPU workloads, consider using the lightweight clerk:cpu image (saves ~4GB).",
-            err=True,
-        )
-
     if eff_whisper_compute.lower() not in VALID_COMPUTE_TYPES:
         _abort(
             f"Error: Invalid --whisper-compute-type '{eff_whisper_compute}'. "
