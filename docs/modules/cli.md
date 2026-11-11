@@ -28,7 +28,9 @@ Before downloading media or initializing neural models, `resolve_cli_config()` v
 - Rejects mutually exclusive flags (`--resume` + `--force`, `--video` + `--meeting`, `--gpu` + `--fast`, `--transcribe-only` + `--summarize-only`, `--transcribe-only` + `--interactive`).
 - **Auto-Detection by File Extension**:
   - Passing a `.srt` target automatically enables `summarize_only=True`.
-  - Passing an existing `.md` target (`*_ata.md` or `*_resume.md`) automatically enables `interactive=True` and `interactive_only=True`, skipping the batch pipeline and resolving its companion `.srt` file directly.
+  - Passing an existing `.md` target (`*_ata.md` or `*_resume.md`) with `--experimental` automatically enables `interactive=True` and `interactive_only=True`, skipping the batch pipeline and resolving its companion `.srt` file directly.
+- **Experimental Feature Gate (`--experimental`)**:
+  - Interactive mode (`-i` / `--interactive`, `--srt`, or `.md` targets) is gated behind `--experimental` and exits with a clear message if `--experimental` is omitted.
 
 ---
 

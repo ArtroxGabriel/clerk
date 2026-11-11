@@ -269,16 +269,21 @@ def main(
         False, "--resume", "-r", help="Reuse existing intermediate files (.wav / .srt / summary) if available."
     ),
     force: bool = typer.Option(False, "--force", "-f", help="Force re-generation of all pipeline steps."),
+    experimental: bool = typer.Option(
+        False,
+        "--experimental",
+        help="Enable experimental features (required for interactive Ata refinement mode).",
+    ),
     interactive: bool = typer.Option(
         False,
         "--interactive",
         "-i",
-        help="Launch interactive Ata/summary refinement session with SRT grounding.",
+        help="[Experimental: requires --experimental] Launch interactive Ata/summary refinement session with SRT grounding.",
     ),
     srt: Path | None = typer.Option(
         None,
         "--srt",
-        help="Path to companion .srt file for interactive grounding.",
+        help="[Experimental: requires --experimental] Path to companion .srt file for interactive grounding.",
     ),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
@@ -307,6 +312,7 @@ def main(
         force=force,
         verbose=verbose,
         gpu_supported=is_gpu_available(),
+        experimental=experimental,
         interactive=interactive,
         srt=srt,
     )

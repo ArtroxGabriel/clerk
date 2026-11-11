@@ -382,7 +382,14 @@ def render_interactive_banner(
         "Tip:",
         "[dim]Tell me who participated, assign action-item owners, add meeting context, or ask about the transcript.[/dim]",
     )
-    out.print(Panel(grid, title="[bold cyan]💬 Interactive Ata Refinement[/bold cyan]", border_style="cyan", padding=(1, 2)))
+    out.print(
+        Panel(
+            grid,
+            title="[bold cyan]💬 Interactive Ata Refinement[/bold cyan] [bold yellow][EXPERIMENTAL][/bold yellow]",
+            border_style="cyan",
+            padding=(1, 2),
+        )
+    )
 
 
 def render_srt_search_results(

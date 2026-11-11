@@ -563,6 +563,24 @@ def test_cli_recovery_retries_with_resume(tmp_path: Path) -> None:
 
 
 
+def test_cli_interactive_flag_requires_experimental_flag(tmp_path: Path) -> None:
+    input_file = tmp_path / "sample.mp3"
+    input_file.write_text("mock audio content")
+
+    result = runner.invoke(app, [str(input_file), "-i"])
+    assert result.exit_code == 1
+    assert "--experimental" in result.output
+
+
+def test_cli_md_target_requires_experimental_flag(tmp_path: Path) -> None:
+    summary_file = tmp_path / "reuniao_ata.md"
+    summary_file.write_text("## Contexto\n* Ata existente.\n")
+
+    result = runner.invoke(app, [str(summary_file)])
+    assert result.exit_code == 1
+    assert "--experimental" in result.output
+
+
 def test_cli_interactive_flag_launches_session_after_pipeline(tmp_path: Path) -> None:
     input_file = tmp_path / "sample.mp3"
     input_file.write_text("mock audio content")
@@ -576,7 +594,7 @@ def test_cli_interactive_flag_launches_session_after_pipeline(tmp_path: Path) ->
         patch("clerk.cli.run_pipeline", return_value=(srt_file, summary_file, mock_res_meta)),
         patch("clerk.cli.run_interactive_session") as mock_interactive,
     ):
-        result = runner.invoke(app, [str(input_file), "-i"])
+        result = runner.invoke(app, [str(input_file), "--experimental", "-i"])
         assert result.exit_code == 0
         mock_interactive.assert_called_once_with(
             summary_path=summary_file,
@@ -598,7 +616,7 @@ def test_cli_md_target_auto_enables_interactive_only_mode(tmp_path: Path) -> Non
         patch("clerk.cli.run_pipeline") as mock_run,
         patch("clerk.cli.run_interactive_session") as mock_interactive,
     ):
-        result = runner.invoke(app, [str(summary_file)])
+        result = runner.invoke(app, [str(summary_file), "--experimental"])
         assert result.exit_code == 0
         mock_run.assert_not_called()
         mock_interactive.assert_called_once_with(
@@ -618,7 +636,7 @@ def test_cli_md_target_with_explicit_srt_flag(tmp_path: Path) -> None:
     custom_srt.write_text("1\n00:00:01,000 --> 00:00:03,000\nOi\n")
 
     with patch("clerk.cli.run_interactive_session") as mock_interactive:
-        result = runner.invoke(app, [str(summary_file), "--srt", str(custom_srt)])
+        result = runner.invoke(app, [str(summary_file), "--experimental", "--srt", str(custom_srt)])
         assert result.exit_code == 0
         mock_interactive.assert_called_once_with(
             summary_path=summary_file,
@@ -634,7 +652,7 @@ def test_cli_transcribe_only_and_interactive_mutually_exclusive(tmp_path: Path) 
     input_file = tmp_path / "sample.mp3"
     input_file.write_text("mock audio content")
 
-    result = runner.invoke(app, [str(input_file), "--transcribe-only", "--interactive"])
+    result = runner.invoke(app, [str(input_file), "--transcribe-only", "--experimental", "--interactive"])
     assert result.exit_code == 1
     assert "Cannot specify both --transcribe-only and --interactive options simultaneously" in result.output
 
@@ -643,6 +661,6 @@ def test_cli_nonexistent_srt_flag_fails(tmp_path: Path) -> None:
     summary_file = tmp_path / "reuniao_ata.md"
     summary_file.write_text("## Contexto\n- Ata.\n")
 
-    result = runner.invoke(app, [str(summary_file), "--srt", str(tmp_path / "missing.srt")])
+    result = runner.invoke(app, [str(summary_file), "--experimental", "--srt", str(tmp_path / "missing.srt")])
     assert result.exit_code == 1
     assert "SRT file does not exist" in result.output

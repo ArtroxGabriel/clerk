@@ -1,6 +1,8 @@
 # Modules: `src/clerk/interactive.py` & `src/clerk/srt_search.py`
 
-The `interactive` and `srt_search` modules power **Clerk v3.0's interactive Ata refinement loop**. Because speech-to-text (`faster-whisper`) does not perform speaker diarization or know external project context, users can enter an interactive session (`-i` / `--interactive` or passing an existing `*_ata.md` target) to supply participant names, assign action-item owners, query the `.srt` transcript for exact timestamped evidence, and refine sections safely.
+> **Experimental Feature**: Interactive Ata refinement is gated behind the `--experimental` CLI flag (`uv run clerk <target> --experimental -i` or `uv run clerk <file>_ata.md --experimental`).
+
+The `interactive` and `srt_search` modules power **Clerk v3.0's experimental interactive Ata refinement loop**. Because speech-to-text (`faster-whisper`) does not perform speaker diarization or know external project context, users can enter an interactive session (`--experimental -i` / `--experimental --interactive` or passing an existing `*_ata.md` target with `--experimental`) to supply participant names, assign action-item owners, query the `.srt` transcript for exact timestamped evidence, and refine sections safely.
 
 ---
 

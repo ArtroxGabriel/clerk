@@ -80,6 +80,7 @@ class ResolvedConfig:
     resume: bool
     force: bool
     verbose: bool
+    experimental: bool = False
     interactive: bool = False
     interactive_only: bool = False
     srt_path: Path | None = None
@@ -187,6 +188,7 @@ def resolve_cli_config(
     force: bool,
     verbose: bool,
     gpu_supported: bool,
+    experimental: bool = False,
     interactive: bool = False,
     srt: Path | None = None,
 ) -> ResolvedConfig:
@@ -271,6 +273,11 @@ def resolve_cli_config(
     eff_summarize_only, eff_interactive, eff_interactive_only = _validate_target_path(
         clean_target, is_url, transcribe_only, summarize_only, interactive
     )
+    if (eff_interactive or eff_interactive_only or validated_srt is not None) and not experimental:
+        _abort(
+            "Error: Interactive Ata refinement (-i / --interactive / .md target) is an experimental feature. "
+            "Pass --experimental to enable it."
+        )
     inferred_video_from_md = eff_interactive_only and Path(clean_target).stem.endswith("_resume")
     is_video = True if video else (False if meeting else (is_url or inferred_video_from_md))
 
@@ -293,6 +300,7 @@ def resolve_cli_config(
         resume=resume,
         force=force,
         verbose=verbose,
+        experimental=experimental,
         interactive=eff_interactive,
         interactive_only=eff_interactive_only,
         srt_path=validated_srt,

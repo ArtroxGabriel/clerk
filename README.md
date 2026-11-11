@@ -74,8 +74,9 @@ uv run clerk <path_or_youtube_url> [OPTIONS]
 | `--preset`, `-p` | `str` | `cpu` | Configuration profile (`cpu`, `fast`, `gpu`, `cuda`, `accurate`) |
 | `--gpu` | `flag` | `False` | Shortcut for `--preset gpu` |
 | `--fast` | `flag` | `False` | Shortcut for `--preset fast` |
-| `--interactive`, `-i` | `flag` | `False` | Launch interactive Ata/summary refinement session with SRT grounding (auto-enabled if target is `.md`) |
-| `--srt` | `path` | `None` | Explicit path to companion `.srt` file for interactive grounding |
+| `--experimental` | `flag` | `False` | Enable experimental features (required for interactive Ata refinement mode) |
+| `--interactive`, `-i` | `flag` | `False` | *[Experimental: requires `--experimental`]* Launch interactive Ata/summary refinement session with SRT grounding (auto-enabled if target is `.md`) |
+| `--srt` | `path` | `None` | *[Experimental: requires `--experimental`]* Explicit path to companion `.srt` file for interactive grounding |
 | `--transcribe-only` | `flag` | `False` | Execute only audio extraction and speech transcription steps |
 | `--summarize-only` | `flag` | `False` | Execute only transcript summarization step (auto-detected if target is `.srt`) |
 | `--prompt` | `str` | `None` | Inline custom summary prompt template (supports `{transcript}` and `{language}`) |
@@ -95,16 +96,18 @@ uv run clerk <path_or_youtube_url> [OPTIONS]
 
 ---
 
-## 💬 Interactive Ata Refinement (`v3.0`)
+## 💬 Interactive Ata Refinement (`v3.0`, Experimental)
+
+> **Note:** Interactive Ata refinement is currently an **experimental** feature and requires passing the `--experimental` flag.
 
 Because `faster-whisper` transcribes speech without speaker diarization or external project context, you can enter an interactive session to refine the generated `Ata`—adding participant names, attributing decisions/action items, or querying the `.srt` transcript for exact quotes and timestamps:
 
 ```bash
 # 1. Run full pipeline and enter interactive refinement right after
-uv run clerk meeting.mp4 -i
+uv run clerk meeting.mp4 --experimental -i
 
 # 2. Or open an existing Ata directly (auto-discovers companion meeting_transcript.srt)
-uv run clerk output/meeting_ata.md
+uv run clerk output/meeting_ata.md --experimental
 ```
 
 ### Interactive Slash Commands & Workflow
