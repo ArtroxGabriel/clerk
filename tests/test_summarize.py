@@ -110,7 +110,7 @@ def test_summarize_success() -> None:
 
     with patch("httpx.Client", return_value=mock_client):
         result = summarize_transcript("Some transcript content")
-        assert result == "## Pontos principais\n- Reunião produtiva"
+        assert result == "## Pontos principais\n* Reunião produtiva"
         assert mock_client.post.call_count == 2
         generate_call = mock_client.post.call_args_list[0]
         unload_call = mock_client.post.call_args_list[1]
@@ -134,7 +134,7 @@ def test_summarize_video_prompt() -> None:
 
     with patch("httpx.Client", return_value=mock_client):
         result = summarize_transcript("Video transcript content", is_video=True)
-        assert result == "## Resumo geral\n- Video summary point"
+        assert result == "## Resumo geral\n* Video summary point"
         assert mock_client.post.call_count == 2
         payload = mock_client.post.call_args_list[0][1]["json"]
         assert "transcript of a video" in payload["prompt"]
@@ -174,7 +174,7 @@ def test_summarize_multi_chunk() -> None:
         assert "## Contexto" in result
         assert "## Pauta e discussões" in result
         assert "## Encaminhamentos" in result
-        assert "- Consolidated Point" in result
+        assert "* Consolidated Point" in result
         assert mock_client.post.call_count == 5
 
 
@@ -210,7 +210,7 @@ def test_summarize_multi_chunk_review_applies_entity_replacements() -> None:
     result = summarize_transcript(long_transcript, max_words_per_chunk=3, backend=backend)
 
     # Assert
-    assert "## Contexto\n- João Silva e João Silva alinharam com Professora Mônica" in result
+    assert "## Contexto\n* João Silva e João Silva alinharam com Professora Mônica" in result
     assert "João Silv " not in result
     assert "Professora Imônica" not in result
     assert "## Pauta e discussões" in result
@@ -271,7 +271,7 @@ def test_summarize_auto_model_pull() -> None:
 
     with patch("httpx.Client", return_value=mock_client):
         res = summarize_transcript("transcript for pulled model")
-        assert res == "## Pontos principais\n- Pulled model summary"
+        assert res == "## Pontos principais\n* Pulled model summary"
         assert mock_client.post.call_count == 4
 
 
@@ -340,7 +340,7 @@ def test_summarize_uses_injected_backend() -> None:
     result = summarize_transcript("This is a valid meeting transcript with content", backend=fake_backend)
 
     # Assert
-    assert result == "## Pontos principais\n- Injected summary point"
+    assert result == "## Pontos principais\n* Injected summary point"
     assert len(fake_backend.generated_prompts) == 1
     assert fake_backend.cleaned_up is True
 

@@ -429,15 +429,13 @@ def render_ata_diff(
 
     diff_text = Text()
     for line in diff_lines:
-        if line.startswith(("+++", "---")):
+        if line.startswith(("+++", "---", "@@")):
             continue
-        if line.startswith("@@"):
-            diff_text.append(f"{line}\n", style="cyan")
-        elif line.startswith("+"):
-            diff_text.append(f"+ {line[1:]}\n", style="bold green")
+        if line.startswith("+"):
+            diff_text.append(f"+ {line[1:].lstrip()}\n", style="bold green")
         elif line.startswith("-"):
-            diff_text.append(f"- {line[1:]}\n", style="bold red")
-        else:
+            diff_text.append(f"- {line[1:].lstrip()}\n", style="bold red")
+        elif line.strip():
             diff_text.append(f"  {line.lstrip()}\n", style="dim")
 
     out.print(Panel(diff_text, title=f"[bold yellow]± {title}[/bold yellow]", border_style="yellow", padding=(1, 2)))

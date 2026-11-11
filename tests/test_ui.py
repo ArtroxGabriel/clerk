@@ -418,13 +418,14 @@ def test_render_ata_diff_displays_added_and_removed_lines() -> None:
     buf = io.StringIO()
     test_console = Console(file=buf, force_terminal=True, width=100)
 
-    old_ata = "## Encaminhamentos\n- Migrar banco de dados\n"
-    new_ata = "## Encaminhamentos\n- Gabriel: Migrar banco de dados até sexta\n"
+    old_ata = "## Encaminhamentos\n* Migrar banco de dados\n"
+    new_ata = "## Encaminhamentos\n* Gabriel: Migrar banco de dados até sexta\n"
 
     render_ata_diff(old_ata, new_ata, console=test_console)
     output = buf.getvalue()
-    assert "- - Migrar banco de dados" in output
-    assert "+ - Gabriel: Migrar banco de dados até sexta" in output
+    assert "@@" not in output
+    assert "- * Migrar banco de dados" in output
+    assert "+ * Gabriel: Migrar banco de dados até sexta" in output
 
 
 @patch("clerk.ui.questionary.select")

@@ -125,7 +125,19 @@ def get_summary_config(is_video: bool) -> SummaryConfig:
 
 
 def format_empty_fallback(section: str, primary_section: str) -> str:
-    return f"- Nenhum {section.lower()} registrado." if section == primary_section else "- Nenhuma registrada."
+    return f"* Nenhum {section.lower()} registrado." if section == primary_section else "* Nenhuma registrada."
+
+
+def normalize_markdown_bullets(text: str) -> str:
+    """Normalizes leading `- ` or numbered markdown list markers to `* ` outside headers."""
+    lines: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            lines.append(line)
+            continue
+        lines.append(re.sub(r"^(\s*)(?:[-+]|\d+\.)\s+", r"\1* ", line))
+    return "\n".join(lines)
 
 
 def unload_ollama_model(
@@ -254,14 +266,15 @@ def _consolidate_sections(
 
         if progress_callback:
             progress_callback(f"Consolidating section {idx}/{len(config.sections)} ({sec}) with {model_name}...")
-        items_text = "\n".join(f"- {item}" for item in items)
+        items_text = "\n".join(f"* {item}" for item in items)
         prompt = prompt_strategy.build_consolidation_prompt(
             category=sec,
             items=items_text,
             language=lang_name,
         )
         content = backend.generate(prompt)
-        summaries[sec] = content or format_empty_fallback(sec, config.primary_section)
+        normalized_content = normalize_markdown_bullets(content) if content else ""
+        summaries[sec] = normalized_content or format_empty_fallback(sec, config.primary_section)
 
     return "\n\n".join(f"## {sec}\n{summaries[sec]}" for sec in config.sections).strip()
 
@@ -371,7 +384,7 @@ def summarize_transcript(
             )
             content = active_backend.generate(prompt)
             if content:
-                return content
+                return normalize_markdown_bullets(content)
             logger.error("LLM backend returned empty response")
             raise RuntimeError("empty summary")
 

@@ -16,19 +16,19 @@ from clerk.interactive import (
 )
 
 SAMPLE_ATA = """## Contexto
-- Reunião de alinhamento do projeto Selene.
+* Reunião de alinhamento do projeto Selene.
 
 ## Pauta e discussões
-- Discussão sobre migração do banco de dados.
+* Discussão sobre migração do banco de dados.
 
 ## Decisões
-- Adiar o deploy para a próxima sprint.
+* Adiar o deploy para a próxima sprint.
 
 ## Encaminhamentos
-- Realizar migração do banco até sexta-feira.
+* Realizar migração do banco até sexta-feira.
 
 ## Pendências
-- Nenhuma registrada."""
+* Nenhuma registrada."""
 
 SAMPLE_SRT = """1
 00:00:01,000 --> 00:00:05,000
@@ -83,9 +83,9 @@ def test_merge_ata_sections_patches_only_modified_sections() -> None:
     assert "Gabriel (Tech Lead) e Mônica (PM)" in merged
     assert "Gabriel: Realizar migração do banco até sexta-feira." in merged
     # Untouched sections must remain intact
-    assert "- Discussão sobre migração do banco de dados." in merged
-    assert "- Adiar o deploy para a próxima sprint." in merged
-    assert "## Pendências\n- Nenhuma registrada." in merged
+    assert "* Discussão sobre migração do banco de dados." in merged
+    assert "* Adiar o deploy para a próxima sprint." in merged
+    assert "## Pendências\n* Nenhuma registrada." in merged
 
 
 def test_merge_ata_sections_returns_none_for_plain_qa_answer() -> None:
