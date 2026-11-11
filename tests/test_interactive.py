@@ -112,6 +112,15 @@ def test_merge_ata_sections_returns_none_for_plain_qa_answer() -> None:
     assert merge_ata_sections(SAMPLE_ATA, llm_output, is_video=False) is None
 
 
+def test_merge_ata_sections_returns_none_when_parsed_sections_equal_current_ata() -> None:
+    llm_output = (
+        "Claro! Segue a seção sem alterações:\n\n"
+        "## Contexto\n"
+        "* Reunião de alinhamento do projeto Selene."
+    )
+    assert merge_ata_sections(SAMPLE_ATA, llm_output, is_video=False) is None
+
+
 def test_get_interactive_strategy_selects_cpu_or_gpu() -> None:
     assert isinstance(get_interactive_strategy("LiquidAI/lfm2.5-1.2b-instruct", is_gpu=False), CpuInteractiveStrategy)
     assert isinstance(get_interactive_strategy("gemma4:e2b", is_gpu=False), GpuInteractiveStrategy)

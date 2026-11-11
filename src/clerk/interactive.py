@@ -112,20 +112,22 @@ def merge_ata_sections(current_ata: str, llm_output: str, is_video: bool = False
     )
     if not header_re.search(llm_output):
         return None
-
     existing_parsed = parse_summary_sections(current_ata, is_video=is_video)
     updated_parsed = parse_summary_sections(llm_output, is_video=is_video)
     mentioned_headers = {m.group(1).lower() for m in header_re.finditer(llm_output)}
-
     blocks: list[str] = []
+    any_changed = False
     for sec in config.sections:
         existing_items = existing_parsed.get(sec, [])
         updated_items = updated_parsed.get(sec, [])
-        items = updated_items if (sec.lower() in mentioned_headers and updated_items) else existing_items
+        if sec.lower() in mentioned_headers and updated_items:
+            items = updated_items
+            any_changed = any_changed or (updated_items != existing_items)
+        else:
+            items = existing_items
         bullets = "\n".join(f"* {item}" for item in items) if items else format_empty_fallback(sec, config.primary_section)
         blocks.append(f"## {sec}\n{bullets}")
-
-    return "\n\n".join(blocks).strip()
+    return "\n\n".join(blocks).strip() if any_changed else None
 
 
 def _format_srt_excerpts(matches: list[SrtMatchWindow]) -> str:
@@ -145,12 +147,14 @@ def _build_system_instructions(lang_name: str, is_video: bool) -> str:
         f"- When the user asks a question about what was said, answer concisely in {lang_name} and cite "
         "[HH:MM:SS -> HH:MM:SS] timestamps from the SRT excerpts. Do NOT output `##` headers when only answering a question.\n"
         "- When the user provides participant names, speaker roles/attributions, meeting context, "
-        f"or asks to edit/improve the Ata, output ONLY the modified section(s) using the exact header names ({headers_str}) "
-        f"followed by `* ` bullet points in {lang_name}.\n"
-        "- CRITICAL: For every section you include in your output, you MUST keep ALL existing bullet points from "
-        "<<<CURRENT_ATA>>> for that section (updating only the specific words, names, or bullets requested by the user). "
-        "Never drop existing bullets or write 'Nenhuma registrada' for a section that already has items. "
-        "Omit any section header that does not need changes—untouched sections are preserved automatically."
+        f"or asks to edit/improve the Ata, you MUST actually incorporate the user's new information into the relevant "
+        f"section(s) (e.g., adding a `* Participantes: ...` or objective bullet under `{config.sections[0]}`, "
+        f"or updating agenda/decision/action bullets) and output ONLY the modified section(s) using the exact header "
+        f"names ({headers_str}) followed by `* ` bullet points in {lang_name}.\n"
+        "- CRITICAL: For every section you include in your output, keep ALL existing bullet points from "
+        "<<<CURRENT_ATA>>> for that section AND add or update the bullets with the new facts provided by the user. "
+        "Never return a section unchanged when the user asked to add or fix information, and never drop existing bullets "
+        "or write 'Nenhuma registrada' for a section that already has items."
     )
 
 
@@ -238,7 +242,9 @@ def _execute_tool_rounds(
                 if m not in collected_matches:
                     collected_matches.append(m)
             messages.append({"role": "tool", "name": call.name, "content": _format_srt_excerpts(tool_matches)})
-        resp = backend.chat(messages, tools=[SEARCH_SRT_TOOL])
+        resp = backend.chat(messages, tools=[SEARCH_SRT_TOOL] if rounds < MAX_TOOL_ROUNDS else None)
+    if not resp.content.strip():
+        resp = backend.chat(messages, tools=None)
     return resp
 
 
@@ -474,21 +480,17 @@ def run_interactive_session(
                 break
             if user_input is None:
                 break
-            clean_input = user_input.strip()
-            if not clean_input:
+            if not (clean_input := user_input.strip()):
                 continue
-
             handled, should_exit, current_ata = _handle_slash_command(
                 clean_input, summary_path, srt_path, initial_ata, current_ata, undo_stack
             )
             if should_exit:
                 break
-            if handled:
-                continue
-
-            current_ata = _process_interactive_turn(
-                clean_input, current_ata, summary_path, srt_path, undo_stack,
-                history, strategy, active_backend, llm_model, language, is_video,
-            )
+            if not handled:
+                current_ata = _process_interactive_turn(
+                    clean_input, current_ata, summary_path, srt_path, undo_stack,
+                    history, strategy, active_backend, llm_model, language, is_video,
+                )
     finally:
         active_backend.cleanup()
