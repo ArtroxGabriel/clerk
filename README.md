@@ -31,7 +31,16 @@ graph TD
 * **[uv](https://docs.astral.sh/uv/)** package manager
 * **FFmpeg** (`apt install ffmpeg` or `brew install ffmpeg`)
 * **ripgrep (`rg`)** *(optional, recommended for fast `.srt` grounding in interactive mode; falls back to `grep` or Python `re`)*
-* **[Ollama](https://ollama.com/)** running locally: `ollama pull LiquidAI/lfm2.5-1.2b-instruct`
+* **[Ollama](https://ollama.com/)** running locally on port `11434` (either native `ollama serve` or via the included `docker-compose.yaml`):
+
+```bash
+# Option A: Start Ollama + auto-pull default model via Docker Compose
+cp .env.example .env   # Edit .env to enable docker-compose.gpu.yaml for GPU mode
+docker compose up -d
+
+# Option B: Native Ollama daemon
+ollama pull LiquidAI/lfm2.5-1.2b-instruct
+```
 
 ### Installation & Usage
 

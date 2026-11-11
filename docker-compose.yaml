@@ -1,0 +1,25 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list > /dev/null 2>&1 || exit 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+      start_period: 2s
+
+  ollama-pull-model:
+    image: ollama/ollama:latest
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    command: ["pull", "LiquidAI/lfm2.5-1.2b-instruct"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+volumes:
+  ollama-data:

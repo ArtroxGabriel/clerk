@@ -163,6 +163,9 @@ def test_gpu_interactive_strategy_executes_tool_call_and_returns_answer(tmp_path
     assert len(turn.srt_matches) >= 1
     assert len(fake_backend.chat_calls) == 2
     assert fake_backend.chat_calls[0][1] is not None  # tools passed on first call
+    second_call_messages = fake_backend.chat_calls[1][0]
+    assert any(m.get("role") == "assistant" and m.get("tool_calls") for m in second_call_messages)
+    assert any(m.get("role") == "tool" and m.get("name") == "search_srt" for m in second_call_messages)
 
 
 def test_gpu_interactive_strategy_falls_back_when_tools_unsupported(tmp_path: Path) -> None:
@@ -315,3 +318,41 @@ def test_run_interactive_session_adjust_flow_persists_refined_edit(
     saved = summary_path.read_text(encoding="utf-8")
     assert "Gabriel (Tech Lead): Migrar banco até sexta." in saved
     assert fake_backend.cleaned_up is True
+
+
+@patch("clerk.interactive.prompt_edit_confirmation")
+@patch("clerk.interactive.questionary.text")
+def test_run_interactive_session_adjust_preserves_draft_when_llm_replies_without_headers(
+    mock_text: MagicMock,
+    mock_confirm: MagicMock,
+    tmp_path: Path,
+) -> None:
+    summary_path = tmp_path / "meeting_ata.md"
+    summary_path.write_text(SAMPLE_ATA, encoding="utf-8")
+
+    fake_backend = FakeInteractiveBackend(
+        [
+            ChatResponse(content="## Encaminhamentos\n- Gabriel: Migrar banco."),
+            ChatResponse(content="Não encontrei menção a horário exato no SRT."),
+        ]
+    )
+
+    mock_text.return_value.ask.side_effect = [
+        "Atribua ao Gabriel",
+        "Qual foi o horário exato?",
+        "/exit",
+    ]
+    # First confirm: 'adjust' -> LLM replies conversationally -> loop continues -> second confirm: 'accept'
+    mock_confirm.side_effect = ["adjust", "accept"]
+
+    run_interactive_session(
+        summary_path=summary_path,
+        srt_path=None,
+        llm_model="LiquidAI/lfm2.5-1.2b-instruct",
+        language="pt",
+        is_video=False,
+        backend=fake_backend,
+    )
+
+    saved = summary_path.read_text(encoding="utf-8")
+    assert "Gabriel: Migrar banco." in saved

@@ -1,0 +1,14 @@
+# GPU override configuration for Ollama Docker Compose
+# Run with: docker compose -f docker-compose.yaml -f docker-compose.gpu.yaml up -d
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  ollama-pull-model:
+    command: ["pull", "gemma4:e2b"]

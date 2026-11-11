@@ -360,11 +360,7 @@ def render_interactive_banner(
     strategy_name: str,
     console: Console | None = None,
 ) -> None:
-    """Display interactive session header with active files, strategy, and slash commands.
-
-    Example:
-        >>> render_interactive_banner(Path("ata.md"), Path("tx.srt"), "gemma4:e2b", "GPU")
-    """
+    """Display interactive session header with active files, strategy, and slash commands."""
     out = console or get_console()
     srt_disp = (
         f"[bold green]{srt_path.name}[/bold green] [dim]({srt_path})[/dim]"
@@ -386,14 +382,7 @@ def render_interactive_banner(
         "Tip:",
         "[dim]Tell me who participated, assign action-item owners, add meeting context, or ask about the transcript.[/dim]",
     )
-
-    panel = Panel(
-        grid,
-        title="[bold cyan]💬 Interactive Ata Refinement[/bold cyan]",
-        border_style="cyan",
-        padding=(1, 2),
-    )
-    out.print(panel)
+    out.print(Panel(grid, title="[bold cyan]💬 Interactive Ata Refinement[/bold cyan]", border_style="cyan", padding=(1, 2)))
 
 
 def render_srt_search_results(
@@ -401,11 +390,7 @@ def render_srt_search_results(
     matches: list[SrtMatchWindow],
     console: Console | None = None,
 ) -> None:
-    """Render timestamped SRT search matches inside a styled Rich panel.
-
-    Example:
-        >>> render_srt_search_results("prazo", [])
-    """
+    """Render timestamped SRT search matches inside a styled Rich panel."""
     out = console or get_console()
     if not matches:
         out.print(
@@ -425,13 +410,8 @@ def render_srt_search_results(
         text.append(f"[{win.start_time} -> {win.end_time}] ", style="bold green")
         text.append(win.text, style="white")
 
-    panel = Panel(
-        text,
-        title=f"[bold green]🔍 SRT Grounding ({len(matches)} excerpts for '{query}')[/bold green]",
-        border_style="green",
-        padding=(1, 2),
-    )
-    out.print(panel)
+    title = f"[bold green]🔍 SRT Grounding ({len(matches)} excerpts for '{query}')[/bold green]"
+    out.print(Panel(text, title=title, border_style="green", padding=(1, 2)))
 
 
 def render_ata_diff(
@@ -440,22 +420,9 @@ def render_ata_diff(
     title: str = "Proposed Ata Changes",
     console: Console | None = None,
 ) -> None:
-    """Render a colorized unified diff between the current and proposed Ata markdown.
-
-    Example:
-        >>> render_ata_diff("## Decisões\\n- A", "## Decisões\\n- B")
-    """
+    """Render a colorized unified diff between the current and proposed Ata markdown."""
     out = console or get_console()
-    diff_lines = list(
-        difflib.unified_diff(
-            old_ata.splitlines(),
-            new_ata.splitlines(),
-            fromfile="current",
-            tofile="proposed",
-            lineterm="",
-            n=2,
-        )
-    )
+    diff_lines = list(difflib.unified_diff(old_ata.splitlines(), new_ata.splitlines(), lineterm="", n=2))
     if not diff_lines:
         out.print("[dim]No structural changes between current and proposed Ata.[/dim]")
         return
@@ -467,31 +434,17 @@ def render_ata_diff(
         if line.startswith("@@"):
             diff_text.append(f"{line}\n", style="cyan")
         elif line.startswith("+"):
-            diff_text.append(f"{line[:1]} {line[1:]}\n", style="bold green")
+            diff_text.append(f"+ {line[1:]}\n", style="bold green")
         elif line.startswith("-"):
-            diff_text.append(f"{line[:1]} {line[1:]}\n", style="bold red")
+            diff_text.append(f"- {line[1:]}\n", style="bold red")
         else:
             diff_text.append(f"  {line.lstrip()}\n", style="dim")
 
-    panel = Panel(
-        diff_text,
-        title=f"[bold yellow]± {title}[/bold yellow]",
-        border_style="yellow",
-        padding=(1, 2),
-    )
-    out.print(panel)
+    out.print(Panel(diff_text, title=f"[bold yellow]± {title}[/bold yellow]", border_style="yellow", padding=(1, 2)))
 
 
-def prompt_edit_confirmation(
-    summary_filename: str,
-    is_interactive: bool | None = None,
-) -> str:
-    """Ask the user whether to accept, discard, or further adjust a proposed Ata update.
-
-    Example:
-        >>> prompt_edit_confirmation("ata.md", is_interactive=False)
-        'discard'
-    """
+def prompt_edit_confirmation(summary_filename: str, is_interactive: bool | None = None) -> str:
+    """Ask the user whether to accept, discard, or further adjust a proposed Ata update."""
     interactive = is_interactive if is_interactive is not None else sys.stdin.isatty()
     if not interactive:
         return "discard"

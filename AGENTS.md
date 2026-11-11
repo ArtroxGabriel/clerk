@@ -24,6 +24,8 @@
 clerk/
 ├── .github/workflows/ci.yml    # GitHub Actions CI quality gate (Ruff, Pyrefly, Pytest >=85% cov)
 ├── AGENTS.md                   # Canonical AI agent instructions, project overview & rules
+├── docker-compose.yaml         # Local Ollama service & CPU default model auto-pull
+├── docker-compose.gpu.yaml     # NVIDIA GPU override for Ollama service & GPU model auto-pull
 ├── pyproject.toml              # Project configuration, dependencies, CLI entrypoint & scripts
 ├── src/
 │   └── clerk/
