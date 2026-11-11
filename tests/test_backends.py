@@ -3,9 +3,14 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from clerk.backends.base import LLMBackend
-from clerk.backends.factory import get_backend
-from clerk.backends.ollama import OllamaBackend
+from clerk.backends import (
+    ChatResponse,
+    LLMBackend,
+    OllamaBackend,
+    ToolCall,
+    ToolNotSupportedError,
+    get_backend,
+)
 
 
 class FakeHttpResponse:
@@ -191,3 +196,82 @@ def test_ollama_backend_reuses_http_client_across_calls(monkeypatch: pytest.Monk
     assert out2 == "Second chunk"
     assert len(created_clients) == 1
     assert created_clients[0].closed is True
+
+
+def test_ollama_backend_chat_returns_sanitized_content(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_client = FakeHttpClient([
+        FakeHttpResponse(200, {"message": {"role": "assistant", "content": "<<<TAG>>> Resposta limpa."}})
+    ])
+    monkeypatch.setattr("httpx.Client", lambda *args, **kwargs: fake_client)
+    backend = OllamaBackend(model_name="test-model", base_url="http://127.0.0.1:11434")
+
+    resp = backend.chat([{"role": "user", "content": "Olá"}])
+
+    assert resp == ChatResponse(content="Resposta limpa.", tool_calls=())
+    assert fake_client.posted_urls == ["/api/chat"]
+    assert fake_client.posted_payloads[0]["model"] == "test-model"
+    assert fake_client.posted_payloads[0]["messages"] == [{"role": "user", "content": "Olá"}]
+
+
+def test_ollama_backend_chat_parses_tool_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_client = FakeHttpClient([
+        FakeHttpResponse(
+            200,
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {"function": {"name": "search_srt", "arguments": {"query": "Gabriel banco"}}}
+                    ],
+                }
+            },
+        )
+    ])
+    monkeypatch.setattr("httpx.Client", lambda *args, **kwargs: fake_client)
+    backend = OllamaBackend(model_name="gemma4:e2b")
+    tools = [{"type": "function", "function": {"name": "search_srt"}}]
+
+    resp = backend.chat([{"role": "user", "content": "Quem falou do banco?"}], tools=tools)
+
+    assert resp.content == ""
+    assert resp.tool_calls == (ToolCall(name="search_srt", arguments={"query": "Gabriel banco"}),)
+    assert fake_client.posted_payloads[0]["tools"] == tools
+
+
+def test_ollama_backend_chat_auto_pulls_missing_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_client = FakeHttpClient([
+        FakeHttpResponse(404, text="model 'gemma4:e2b' not found"),
+        FakeHttpResponse(200, {"status": "success"}),
+        FakeHttpResponse(200, {"message": {"role": "assistant", "content": "Pulled chat reply"}}),
+    ])
+    monkeypatch.setattr("httpx.Client", lambda *args, **kwargs: fake_client)
+    backend = OllamaBackend(model_name="gemma4:e2b")
+
+    resp = backend.chat([{"role": "user", "content": "Oi"}])
+
+    assert resp.content == "Pulled chat reply"
+    assert fake_client.posted_urls == ["/api/chat", "/api/pull", "/api/chat"]
+
+
+def test_ollama_backend_chat_raises_tool_not_supported_error_on_400(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_client = FakeHttpClient([
+        FakeHttpResponse(400, text="registry.ollama.ai/library/model does not support tools")
+    ])
+    monkeypatch.setattr("httpx.Client", lambda *args, **kwargs: fake_client)
+    backend = OllamaBackend(model_name="test-model")
+
+    with pytest.raises(ToolNotSupportedError, match="does not support tools"):
+        backend.chat(
+            [{"role": "user", "content": "Oi"}],
+            tools=[{"type": "function", "function": {"name": "search_srt"}}],
+        )
+
+
+def test_ollama_backend_chat_raises_clear_error_when_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_client = FakeHttpClient([httpx.ConnectError("Connection refused")])
+    monkeypatch.setattr("httpx.Client", lambda *args, **kwargs: fake_client)
+    backend = OllamaBackend(model_name="test-model")
+
+    with pytest.raises(RuntimeError, match="Could not connect to local Ollama server"):
+        backend.chat([{"role": "user", "content": "Oi"}])

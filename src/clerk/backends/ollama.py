@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import httpx
 
 from clerk.prompts import clean_llm_output
+
+from .base import ChatResponse, ToolCall, ToolNotSupportedError
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +23,19 @@ DEFAULT_OLLAMA_OPTIONS: dict[str, int | float] = {
     "top_p": 0.9,
     "repeat_penalty": 1.05,
 }
+
+
+def _parse_tool_calls(raw_calls: list[dict[str, Any]] | None) -> tuple[ToolCall, ...]:
+    if not raw_calls:
+        return ()
+    parsed: list[ToolCall] = []
+    for item in raw_calls:
+        fn = item.get("function") or {}
+        name = str(fn.get("name", "")).strip()
+        args = fn.get("arguments")
+        if name and isinstance(args, dict):
+            parsed.append(ToolCall(name=name, arguments=args))
+    return tuple(parsed)
 
 
 class OllamaBackend:
@@ -73,13 +89,17 @@ class OllamaBackend:
                 f"ollama request failed: Model '{self.model_name}' not found and cannot be pulled while offline."
             ) from err
 
-    def _execute_generate_post(self, client: httpx.Client, payload: dict) -> str:
-        """Posts generate request and handles 404 auto-pull fallback."""
-        resp = client.post("/api/generate", json=payload)
+    def _post_with_auto_pull(self, client: httpx.Client, endpoint: str, payload: dict[str, Any]) -> httpx.Response:
+        """Posts JSON payload to an Ollama endpoint and retries after auto-pull on 404."""
+        resp = client.post(endpoint, json=payload)
         if resp.status_code != 200 and ("not found" in resp.text.lower() or resp.status_code == 404):
             self._attempt_auto_pull(client)
-            resp = client.post("/api/generate", json=payload)
+            resp = client.post(endpoint, json=payload)
+        return resp
 
+    def _execute_generate_post(self, client: httpx.Client, payload: dict[str, Any]) -> str:
+        """Posts generate request and handles 404 auto-pull fallback."""
+        resp = self._post_with_auto_pull(client, "/api/generate", payload)
         if resp.status_code != 200:
             logger.error("Ollama request failed: %s %s", resp.status_code, resp.text)
             raise RuntimeError(f"ollama request failed: {resp.status_code} {resp.text.strip()}")
@@ -104,6 +124,44 @@ class OllamaBackend:
                 f"ollama request failed: Could not connect to local Ollama server at {self.base_url}. "
                 "Ensure Ollama is running ('ollama serve')."
             ) from err
+
+    def chat(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> ChatResponse:
+        """Executes a multi-turn chat request against Ollama /api/chat."""
+        payload: dict[str, Any] = {
+            "model": self.model_name,
+            "messages": messages,
+            "stream": False,
+            "think": False,
+            "options": self.options,
+        }
+        if tools:
+            payload["tools"] = tools
+
+        try:
+            resp = self._post_with_auto_pull(self._get_client(), "/api/chat", payload)
+        except (httpx.ConnectError, httpx.ConnectTimeout) as err:
+            logger.error("Could not connect to Ollama at %s: %s", self.base_url, err)
+            raise RuntimeError(
+                f"ollama request failed: Could not connect to local Ollama server at {self.base_url}. "
+                "Ensure Ollama is running ('ollama serve')."
+            ) from err
+
+        if resp.status_code == 400 and "support tools" in resp.text.lower():
+            raise ToolNotSupportedError(f"Model '{self.model_name}' does not support tools: {resp.text.strip()}")
+
+        if resp.status_code != 200:
+            logger.error("Ollama chat request failed: %s %s", resp.status_code, resp.text)
+            raise RuntimeError(f"ollama request failed: {resp.status_code} {resp.text.strip()}")
+
+        data = resp.json()
+        msg = data.get("message") or {}
+        content = clean_llm_output(str(msg.get("content", "")).strip())
+        tool_calls = _parse_tool_calls(msg.get("tool_calls"))
+        return ChatResponse(content=content, tool_calls=tool_calls)
 
     def cleanup(self) -> None:
         """Unloads model from Ollama memory via keep_alive: 0 and closes HTTP client."""

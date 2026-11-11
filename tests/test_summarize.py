@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from clerk.backends import ChatResponse
 from clerk.summarize import (
     DEFAULT_MAX_WORDS_PER_CHUNK,
     parse_summary_sections,
@@ -190,6 +191,9 @@ def test_summarize_multi_chunk_review_applies_entity_replacements() -> None:
             self.prompts.append(prompt)
             return self.responses.pop(0)
 
+        def chat(self, messages: list[dict], tools: list[dict] | None = None) -> ChatResponse:
+            return ChatResponse(content=self.generate(str(messages)))
+
         def cleanup(self) -> None:
             pass
 
@@ -321,6 +325,9 @@ class FakeLLMBackend:
         self.generated_prompts.append(prompt)
         return self.response_text
 
+    def chat(self, messages: list[dict], tools: list[dict] | None = None) -> ChatResponse:
+        return ChatResponse(content=self.response_text)
+
     def cleanup(self) -> None:
         self.cleaned_up = True
 
@@ -345,6 +352,9 @@ def test_summarize_cleans_up_backend_on_error() -> None:
             self.cleaned_up = False
 
         def generate(self, prompt: str) -> str:
+            raise RuntimeError("Inference failed")
+
+        def chat(self, messages: list[dict], tools: list[dict] | None = None) -> ChatResponse:
             raise RuntimeError("Inference failed")
 
         def cleanup(self) -> None:
