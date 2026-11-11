@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import difflib
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
     from .config import ResolvedConfig
+    from .srt_search import SrtMatchWindow
 
 _stdout_console: Console | None = None
 _stderr_console: Console | None = None
@@ -348,3 +350,156 @@ def prompt_recovery_menu(
         return current_llm, current_whisper, current_compute, current_device, True
 
     return current_llm, current_whisper, current_compute, current_device, False
+
+
+
+def render_interactive_banner(
+    summary_path: Path,
+    srt_path: Path | None,
+    llm_model: str,
+    strategy_name: str,
+    console: Console | None = None,
+) -> None:
+    """Display interactive session header with active files, strategy, and slash commands.
+
+    Example:
+        >>> render_interactive_banner(Path("ata.md"), Path("tx.srt"), "gemma4:e2b", "GPU")
+    """
+    out = console or get_console()
+    srt_disp = (
+        f"[bold green]{srt_path.name}[/bold green] [dim]({srt_path})[/dim]"
+        if srt_path
+        else "[dim yellow]Not found (Ata-only mode)[/dim yellow]"
+    )
+
+    grid = Table.grid(padding=(0, 2))
+    grid.add_column(style="bold cyan", justify="right")
+    grid.add_column(style="white")
+    grid.add_row("Summary File:", f"[bold magenta]{summary_path.name}[/bold magenta] [dim]({summary_path})[/dim]")
+    grid.add_row("SRT Grounding:", srt_disp)
+    grid.add_row("LLM & Strategy:", f"[bold]{llm_model}[/bold] [dim]({strategy_name})[/dim]")
+    grid.add_row(
+        "Commands:",
+        "[cyan]/search <term>[/cyan] · [cyan]/show[/cyan] · [cyan]/diff[/cyan] · [cyan]/undo[/cyan] · [cyan]/help[/cyan] · [cyan]/exit[/cyan]",
+    )
+    grid.add_row(
+        "Tip:",
+        "[dim]Tell me who participated, assign action-item owners, add meeting context, or ask about the transcript.[/dim]",
+    )
+
+    panel = Panel(
+        grid,
+        title="[bold cyan]💬 Interactive Ata Refinement[/bold cyan]",
+        border_style="cyan",
+        padding=(1, 2),
+    )
+    out.print(panel)
+
+
+def render_srt_search_results(
+    query: str,
+    matches: list[SrtMatchWindow],
+    console: Console | None = None,
+) -> None:
+    """Render timestamped SRT search matches inside a styled Rich panel.
+
+    Example:
+        >>> render_srt_search_results("prazo", [])
+    """
+    out = console or get_console()
+    if not matches:
+        out.print(
+            Panel(
+                f"[yellow]No SRT matches found for query:[/yellow] [bold]{query}[/bold]",
+                title="[bold yellow]🔍 SRT Search[/bold yellow]",
+                border_style="yellow",
+                padding=(0, 1),
+            )
+        )
+        return
+
+    text = Text()
+    for i, win in enumerate(matches):
+        if i > 0:
+            text.append("\n\n")
+        text.append(f"[{win.start_time} -> {win.end_time}] ", style="bold green")
+        text.append(win.text, style="white")
+
+    panel = Panel(
+        text,
+        title=f"[bold green]🔍 SRT Grounding ({len(matches)} excerpts for '{query}')[/bold green]",
+        border_style="green",
+        padding=(1, 2),
+    )
+    out.print(panel)
+
+
+def render_ata_diff(
+    old_ata: str,
+    new_ata: str,
+    title: str = "Proposed Ata Changes",
+    console: Console | None = None,
+) -> None:
+    """Render a colorized unified diff between the current and proposed Ata markdown.
+
+    Example:
+        >>> render_ata_diff("## Decisões\\n- A", "## Decisões\\n- B")
+    """
+    out = console or get_console()
+    diff_lines = list(
+        difflib.unified_diff(
+            old_ata.splitlines(),
+            new_ata.splitlines(),
+            fromfile="current",
+            tofile="proposed",
+            lineterm="",
+            n=2,
+        )
+    )
+    if not diff_lines:
+        out.print("[dim]No structural changes between current and proposed Ata.[/dim]")
+        return
+
+    diff_text = Text()
+    for line in diff_lines:
+        if line.startswith(("+++", "---")):
+            continue
+        if line.startswith("@@"):
+            diff_text.append(f"{line}\n", style="cyan")
+        elif line.startswith("+"):
+            diff_text.append(f"{line[:1]} {line[1:]}\n", style="bold green")
+        elif line.startswith("-"):
+            diff_text.append(f"{line[:1]} {line[1:]}\n", style="bold red")
+        else:
+            diff_text.append(f"  {line.lstrip()}\n", style="dim")
+
+    panel = Panel(
+        diff_text,
+        title=f"[bold yellow]± {title}[/bold yellow]",
+        border_style="yellow",
+        padding=(1, 2),
+    )
+    out.print(panel)
+
+
+def prompt_edit_confirmation(
+    summary_filename: str,
+    is_interactive: bool | None = None,
+) -> str:
+    """Ask the user whether to accept, discard, or further adjust a proposed Ata update.
+
+    Example:
+        >>> prompt_edit_confirmation("ata.md", is_interactive=False)
+        'discard'
+    """
+    interactive = is_interactive if is_interactive is not None else sys.stdin.isatty()
+    if not interactive:
+        return "discard"
+
+    choices = [
+        questionary.Choice(f"✔ Accept & save to {summary_filename}", value="accept"),
+        questionary.Choice("✖ Discard this change", value="discard"),
+        questionary.Choice("✎ Ask model to adjust further", value="adjust"),
+    ]
+    selected = questionary.select("Apply proposed update to the Ata?", choices=choices).ask()
+    return str(selected) if selected in ("accept", "discard", "adjust") else "discard"

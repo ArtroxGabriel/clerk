@@ -7,14 +7,19 @@ from unittest.mock import MagicMock, patch
 from rich.console import Console
 
 from clerk.config import ResolvedConfig
+from clerk.srt_search import SrtMatchWindow
 from clerk.ui import (
     create_transcription_progress,
     get_console,
     get_err_console,
     print_step_complete,
+    prompt_edit_confirmation,
     prompt_recovery_menu,
+    render_ata_diff,
     render_config_panel,
+    render_interactive_banner,
     render_markdown_preview,
+    render_srt_search_results,
     render_startup_banner,
     render_status_summary,
     step_spinner,
@@ -361,3 +366,73 @@ def test_print_step_complete() -> None:
     output = buf.getvalue()
     assert "Transcription completed" in output
     assert "00:00:12:34" in output
+
+
+
+def test_render_interactive_banner_with_and_without_srt(tmp_path: Path) -> None:
+    buf = io.StringIO()
+    test_console = Console(file=buf, force_terminal=True, width=100)
+
+    render_interactive_banner(
+        summary_path=tmp_path / "meeting_ata.md",
+        srt_path=tmp_path / "meeting_transcript.srt",
+        llm_model="gemma4:e2b",
+        strategy_name="GPU Tool-Calling",
+        console=test_console,
+    )
+    render_interactive_banner(
+        summary_path=tmp_path / "meeting_ata.md",
+        srt_path=None,
+        llm_model="LiquidAI/lfm2.5-1.2b-instruct",
+        strategy_name="CPU Deterministic",
+        console=test_console,
+    )
+
+    output = buf.getvalue()
+    assert "Interactive Ata Refinement" in output
+    assert "meeting_ata.md" in output
+    assert "meeting_transcript.srt" in output
+    assert "Not found" in output
+    assert "/search" in output
+    assert "/undo" in output
+
+
+def test_render_srt_search_results_empty_and_populated() -> None:
+    buf = io.StringIO()
+    test_console = Console(file=buf, force_terminal=True, width=100)
+
+    render_srt_search_results("inexistente", [], console=test_console)
+    render_srt_search_results(
+        "Gabriel",
+        [SrtMatchWindow("00:01:02", "00:01:10", "Gabriel assumiu o banco.", (2,))],
+        console=test_console,
+    )
+
+    output = buf.getvalue()
+    assert "No SRT matches found" in output
+    assert "00:01:02 -> 00:01:10" in output
+    assert "Gabriel assumiu o banco." in output
+
+
+def test_render_ata_diff_displays_added_and_removed_lines() -> None:
+    buf = io.StringIO()
+    test_console = Console(file=buf, force_terminal=True, width=100)
+
+    old_ata = "## Encaminhamentos\n- Migrar banco de dados\n"
+    new_ata = "## Encaminhamentos\n- Gabriel: Migrar banco de dados até sexta\n"
+
+    render_ata_diff(old_ata, new_ata, console=test_console)
+    output = buf.getvalue()
+    assert "- - Migrar banco de dados" in output
+    assert "+ - Gabriel: Migrar banco de dados até sexta" in output
+
+
+@patch("clerk.ui.questionary.select")
+def test_prompt_edit_confirmation_interactive_and_fallback(mock_select: MagicMock) -> None:
+    assert prompt_edit_confirmation("meeting_ata.md", is_interactive=False) == "discard"
+
+    mock_select.return_value.ask.return_value = "accept"
+    assert prompt_edit_confirmation("meeting_ata.md", is_interactive=True) == "accept"
+
+    mock_select.return_value.ask.return_value = None
+    assert prompt_edit_confirmation("meeting_ata.md", is_interactive=True) == "discard"
