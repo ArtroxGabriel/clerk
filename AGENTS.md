@@ -14,6 +14,7 @@
 - **Immediate Step File Persistence**: Saves `.wav`, `.srt`, and interim metadata files to disk immediately after each step completes rather than waiting for pipeline completion, ensuring zero data loss if downstream steps fail.
 - **Smart Sentence Chunking**: Automatically breaks long transcripts (> 3000 words) at sentence and clause boundaries to prevent splitting in the middle of sentences or words.
 - **Security & Prompt Injection Protection**: Strips SRT timestamps and wraps prompts in `<<<TRANSCRIPT>>>` and `<<<ITEMS>>>` delimiters. Automatically sanitizes all `<<<...>>>` delimiter tags from final LLM responses (`clean_llm_output`).
+- **Modern & Colorful TUI**: Delivers a rich terminal user interface built with `rich` and `questionary`, featuring animated step spinners for audio normalization, transcription, and summarization, colorful startup banners and configuration cards, stylized execution timing and audio metric tables, interactive keyboard-navigable recovery menus, and live terminal preview of generated Markdown meeting minutes.
 - **Guard Rails & Model Recovery**: Short-circuits empty, garbled, or noise-only transcripts before making LLM calls (`is_meaningful_transcript`). Provides an interactive CLI recovery menu on pipeline/model errors to change LLM models, Whisper models, compute types, or target devices on the fly, automatically resuming from existing intermediate files without re-downloading media or re-transcribing.
 
 # File Structure Overview
@@ -43,7 +44,8 @@ clerk/
 │       │   ├── gpu.py          # GpuPromptStrategy (expressive guidelines for GPU models)
 │       │   └── custom.py       # CustomPromptStrategy (template substitution & fallback)
 │       ├── summarize.py        # Summarization coordinator, section parsing & smart transcript chunking
-│       └── transcribe.py       # faster-whisper BatchedInferencePipeline speech-to-text engine
+│       ├── transcribe.py       # faster-whisper BatchedInferencePipeline speech-to-text engine
+│       └── ui.py               # Modern Rich terminal presentation, progress spinners & Questionary recovery
 └── tests/
     ├── test_audio.py           # Tests for audio extraction, yt-dlp subtitles/audio & YouTube ID regex
     ├── test_backends.py        # Tests for OllamaBackend, HTTP client reuse & backend factory
@@ -51,7 +53,8 @@ clerk/
     ├── test_pipeline.py        # Integration tests for end-to-end pipeline & step execution
     ├── test_prompts.py         # Tests for prompt strategy generation, noise detection & custom templates
     ├── test_summarize.py       # Tests for transcript chunking, Ollama calls & empty short-circuiting
-    └── test_transcribe.py      # Tests for Whisper STT transcription, VRAM cleanup & SRT formatting
+    ├── test_transcribe.py      # Tests for Whisper STT transcription, VRAM cleanup & SRT formatting
+    └── test_ui.py              # Tests for Rich status panels, banner formatting & interactive recovery
 ```
 
 ### Module Descriptions
@@ -62,6 +65,7 @@ clerk/
 - **`src/clerk/prompts/`**: Encapsulates prompt strategy logic (`CpuPromptStrategy`, `GpuPromptStrategy`, `CustomPromptStrategy`), provides `clean_srt_for_prompt`, `clean_llm_output` (universal `<<<...>>>` tag stripper), and `is_meaningful_transcript` (noise/hallucination guard rail).
 - **`src/clerk/summarize.py`**: Communicates with local Ollama `/api/generate` endpoint, handles smart transcript splitting by sentence/clause boundaries (`split_transcript_smart`), and parses summary section markdown headers.
 - **`src/clerk/transcribe.py`**: Loads `WhisperModel` and `BatchedInferencePipeline` from `faster-whisper`, formats SRT blocks, and generates transcript metadata (language, duration, VAD coverage).
+- **`src/clerk/ui.py`**: Encapsulates all modern visual and interactive terminal presentation using `rich` and `questionary`. Provides startup branding banners, configuration panels, live execution step spinners, completion summary cards, Markdown previews, and keyboard-navigable interactive recovery prompts with seamless non-interactive fallbacks.
 
 
 # Other Points

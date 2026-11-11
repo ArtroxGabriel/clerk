@@ -1,6 +1,6 @@
 [project]
 name = "clerk"
-version = "1.0.0"
+version = "2.0.0"
 description = "Local pipeline for transcription and meeting bullet points"
 readme = "README.md"
 authors = [{ name = "Gabrigas", email = "artroxgabriel@gmail.com" }]
@@ -9,6 +9,8 @@ dependencies = [
     "av<19",
     "faster-whisper>=1.2.1",
     "httpx>=0.28.1",
+    "questionary>=2.1.0",
+    "rich>=15.0.0",
     "typer>=0.27.3",
     "yt-dlp>=2026.8.19",
 ]
