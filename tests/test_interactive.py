@@ -88,6 +88,25 @@ def test_merge_ata_sections_patches_only_modified_sections() -> None:
     assert "## Pendências\n* Nenhuma registrada." in merged
 
 
+def test_merge_ata_sections_preserves_existing_items_when_llm_outputs_empty_section() -> None:
+    llm_output = (
+        "## Contexto\n"
+        "* Reunião com cliente SEBRAE (corrigido de CEPRA).\n\n"
+        "## Pendências\n"
+        "* Nenhuma registrada."
+    )
+
+    merged = merge_ata_sections(
+        SAMPLE_ATA.replace("* Nenhuma registrada.", "* Definir escopo final com o cliente."),
+        llm_output,
+        is_video=False,
+    )
+    assert merged is not None
+    assert "SEBRAE" in merged
+    # Non-empty Pendências must NOT be wiped when LLM outputs empty/Nenhuma registrada
+    assert "* Definir escopo final com o cliente." in merged
+
+
 def test_merge_ata_sections_returns_none_for_plain_qa_answer() -> None:
     llm_output = "De acordo com o SRT em [00:00:01 -> 00:00:05], o Gabriel ficou responsável pelo banco."
     assert merge_ata_sections(SAMPLE_ATA, llm_output, is_video=False) is None

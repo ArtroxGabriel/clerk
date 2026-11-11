@@ -119,7 +119,9 @@ def merge_ata_sections(current_ata: str, llm_output: str, is_video: bool = False
 
     blocks: list[str] = []
     for sec in config.sections:
-        items = updated_parsed.get(sec, []) if sec.lower() in mentioned_headers else existing_parsed.get(sec, [])
+        existing_items = existing_parsed.get(sec, [])
+        updated_items = updated_parsed.get(sec, [])
+        items = updated_items if (sec.lower() in mentioned_headers and updated_items) else existing_items
         bullets = "\n".join(f"* {item}" for item in items) if items else format_empty_fallback(sec, config.primary_section)
         blocks.append(f"## {sec}\n{bullets}")
 
@@ -144,7 +146,11 @@ def _build_system_instructions(lang_name: str, is_video: bool) -> str:
         "[HH:MM:SS -> HH:MM:SS] timestamps from the SRT excerpts. Do NOT output `##` headers when only answering a question.\n"
         "- When the user provides participant names, speaker roles/attributions, meeting context, "
         f"or asks to edit/improve the Ata, output ONLY the modified section(s) using the exact header names ({headers_str}) "
-        f"followed by `* ` bullet points in {lang_name}. Untouched sections will be preserved automatically."
+        f"followed by `* ` bullet points in {lang_name}.\n"
+        "- CRITICAL: For every section you include in your output, you MUST keep ALL existing bullet points from "
+        "<<<CURRENT_ATA>>> for that section (updating only the specific words, names, or bullets requested by the user). "
+        "Never drop existing bullets or write 'Nenhuma registrada' for a section that already has items. "
+        "Omit any section header that does not need changes—untouched sections are preserved automatically."
     )
 
 
