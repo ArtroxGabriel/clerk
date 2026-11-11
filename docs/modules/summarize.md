@@ -79,9 +79,11 @@ client.post("/api/generate", json=payload)
 
 ## 📖 Public API Reference
 
-| Function | Input Parameters | Return Type | Description |
+| Function / Method | Input Parameters | Return Type | Description |
 |---|---|---|---|
 | `split_transcript_smart` | `transcript, max_words=2000` | `list[str]` | Boundary-aware transcript chunker. |
 | `parse_summary_sections` | `summary, is_video=False` | `dict[str, list[str]]` | Parses section bullet points. |
 | `summarize_transcript` | `transcript, model_name, base_url, timeout_seconds, max_words_per_chunk, language, is_video, is_gpu_model` | `str` | Main entrypoint for transcript summarization. |
-| `unload_ollama_model` | `model_name, base_url, timeout_seconds=10.0` | `None` | Unloads model from Ollama VRAM/RAM. |
+| `OllamaBackend.generate` | `prompt: str` | `str` | Single-turn generation via `/api/generate` with auto-pull. |
+| `OllamaBackend.chat` | `messages: list[dict], tools: list[dict] \| None = None` | `ChatResponse` | Multi-turn chat via `/api/chat` with tool-calling support. |
+| `unload_ollama_model` | `model_name, base_url, timeout_seconds=10.0` | `None` | Unloads model from Ollama VRAM/RAM (`keep_alive: 0`). |

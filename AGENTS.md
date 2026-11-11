@@ -10,8 +10,9 @@
 - **LLM Summarization**: Interfaces with a local Ollama instance (`http://127.0.0.1:11434`) via reusable HTTP connections to produce structured Portuguese markdown meeting minutes / Ata (`## Contexto`, `## Pauta e discussões`, `## Decisões`, `## Encaminhamentos`, `## Pendências` saved to `<stem>_ata.md`) or general video summaries (`<stem>_resume.md`).
 - **CPU vs GPU Strategy**: Features dedicated prompt strategies (`CpuPromptStrategy` for models like `LiquidAI/lfm2.5-1.2b-instruct`, `GpuPromptStrategy` for models like `gemma4:e2b` / `llama3.1:8b`, and `CustomPromptStrategy` for custom templates).
 - **Custom Prompt Overrides**: Supports overriding stage 1 summary/chunk prompts (`--prompt` or `--prompt-file`) and stage 2 consolidation prompts (`--consolidation-prompt` or `--consolidation-prompt-file`) with `{transcript}`, `{category}`, `{items}`, and `{language}` placeholder substitution.
-- **Isolated Step Execution & Resuming**: Supports running only transcription (`--transcribe-only`), only summarization (`--summarize-only` or passing `.srt` targets directly), and resuming previous pipeline progress with `--resume` / `-r` (or forcing regeneration with `--force` / `-f`).
-- **Immediate Step File Persistence**: Saves `.wav`, `.srt`, and interim metadata files to disk immediately after each step completes rather than waiting for pipeline completion, ensuring zero data loss if downstream steps fail.
+- **Isolated Step Execution & Resuming**: Supports running only transcription (`--transcribe-only`), only summarization (`--summarize-only` or passing `.srt` targets directly), interactive Ata refinement (`--interactive` / `-i` or passing `.md` targets directly), and resuming previous pipeline progress with `--resume` / `-r` (or forcing regeneration with `--force` / `-f`).
+- **Interactive Ata Refinement & SRT Grounding (`v3.0`)**: Provides a multi-turn interactive TUI session (`--interactive` / `-i`) backed by Ollama `/api/chat` and a fast `rg` $\rightarrow$ `grep` $\rightarrow$ Python `.srt` block search engine (`src/clerk/srt_search.py`). Uses `CpuInteractiveStrategy` (deterministic SRT pre-search) for CPU models and `GpuInteractiveStrategy` (agentic `search_srt` tool-calling with deterministic fallback) for GPU models, allowing users to supply participant names, speaker roles/attributions, and meeting context, preview unified diffs, confirm or adjust edits, and `/undo` changes.
+- **Immediate Step File Persistence**: Saves `.wav`, `.srt`, interim metadata, and accepted interactive `.md` edits to disk immediately after each step completes rather than waiting for pipeline completion, ensuring zero data loss if downstream steps fail.
 - **Smart Sentence Chunking**: Automatically breaks long transcripts (> 3000 words) at sentence and clause boundaries to prevent splitting in the middle of sentences or words.
 - **Security & Prompt Injection Protection**: Strips SRT timestamps and wraps prompts in `<<<TRANSCRIPT>>>` and `<<<ITEMS>>>` delimiters. Automatically sanitizes all `<<<...>>>` delimiter tags from final LLM responses (`clean_llm_output`).
 - **Modern & Colorful TUI**: Delivers a rich terminal user interface built with `rich` and `questionary`, featuring animated step spinners for audio normalization, transcription, and summarization, colorful startup banners and configuration cards, stylized execution timing and audio metric tables, interactive keyboard-navigable recovery menus, and live terminal preview of generated Markdown meeting minutes.
@@ -35,6 +36,7 @@ clerk/
 │       │   └── ollama.py       # OllamaBackend with persistent httpx.Client & auto-pull
 │       ├── cli.py              # Typer CLI application, status display & recovery menu
 │       ├── config.py           # Presets, GPU detection & CLI option validation (ResolvedConfig)
+│       ├── interactive.py      # Interactive Ata refinement loop, CPU/GPU strategies & section merger
 │       ├── pipeline.py         # End-to-end pipeline coordinator & isolated step handlers
 │       ├── prompts/            # Prompts subpackage
 │       │   ├── __init__.py     # Package re-exports
@@ -43,26 +45,31 @@ clerk/
 │       │   ├── cpu.py          # CpuPromptStrategy (compact rules for CPU models)
 │       │   ├── gpu.py          # GpuPromptStrategy (expressive guidelines for GPU models)
 │       │   └── custom.py       # CustomPromptStrategy (template substitution & fallback)
+│       ├── srt_search.py       # SRT block parser & rg -> grep -> Python timestamped search engine
 │       ├── summarize.py        # Summarization coordinator, section parsing & smart transcript chunking
 │       ├── transcribe.py       # faster-whisper BatchedInferencePipeline speech-to-text engine
 │       └── ui.py               # Modern Rich terminal presentation, progress spinners & Questionary recovery
 └── tests/
     ├── test_audio.py           # Tests for audio extraction, yt-dlp subtitles/audio & YouTube ID regex
-    ├── test_backends.py        # Tests for OllamaBackend, HTTP client reuse & backend factory
-    ├── test_cli.py             # Tests for CLI flags, positional target, presets & recovery loop
+    ├── test_backends.py        # Tests for OllamaBackend, /api/chat, tool-calling & backend factory
+    ├── test_cli.py             # Tests for CLI flags, positional target, presets, -i & recovery loop
+    ├── test_interactive.py     # Tests for CPU/GPU interactive strategies, section merging & undo loop
     ├── test_pipeline.py        # Integration tests for end-to-end pipeline & step execution
     ├── test_prompts.py         # Tests for prompt strategy generation, noise detection & custom templates
+    ├── test_srt_search.py      # Tests for SRT block parsing, rg/grep/Python search & windowing
     ├── test_summarize.py       # Tests for transcript chunking, Ollama calls & empty short-circuiting
     ├── test_transcribe.py      # Tests for Whisper STT transcription, VRAM cleanup & SRT formatting
-    └── test_ui.py              # Tests for Rich status panels, banner formatting & interactive recovery
+    └── test_ui.py              # Tests for Rich status panels, diff viewer & interactive prompts
 ```
 
 ### Module Descriptions
 
 - **`src/clerk/audio.py`**: Manages `ffmpeg` verification and execution for audio normalization to 16kHz mono WAV, as well as `yt-dlp` YouTube audio extraction with title restriction.
-- **`src/clerk/cli.py`**: Entrypoint for the `clerk` CLI using Typer. Handles preset management (`cpu`, `fast`, `gpu`, `cuda`, `accurate`), option verification (CPU compute type checks), execution time formatting (`hh:mm:ss:mm`), custom prompt flags, and the interactive recovery loop.
+- **`src/clerk/cli.py`**: Entrypoint for the `clerk` CLI using Typer. Handles preset management (`cpu`, `fast`, `gpu`, `cuda`, `accurate`), option verification (CPU compute type checks), execution time formatting (`hh:mm:ss:mm`), custom prompt flags, interactive mode flags (`-i` / `--interactive`, `--srt`), and the interactive recovery loop.
+- **`src/clerk/interactive.py`**: Implements the interactive Ata/summary refinement session (`run_interactive_session`), CPU vs. GPU interactive strategies (`CpuInteractiveStrategy` and `GpuInteractiveStrategy`), companion `.srt` discovery (`resolve_companion_srt`), section-preserving Markdown patching (`merge_ata_sections`), slash commands (`/search`, `/show`, `/diff`, `/undo`, `/help`, `/exit`), and immediate persistence with an in-memory undo stack.
 - **`src/clerk/pipeline.py`**: Orchestrates sequential or isolated pipeline steps: Audio extraction $\rightarrow$ Whisper STT transcription $\rightarrow$ Ollama LLM summarization $\rightarrow$ Output file creation.
 - **`src/clerk/prompts/`**: Encapsulates prompt strategy logic (`CpuPromptStrategy`, `GpuPromptStrategy`, `CustomPromptStrategy`), provides `clean_srt_for_prompt`, `clean_llm_output` (universal `<<<...>>>` tag stripper), and `is_meaningful_transcript` (noise/hallucination guard rail).
+- **`src/clerk/srt_search.py`**: Parses `.srt` subtitle files into line-indexed `SrtBlock` objects and executes fast case-insensitive line searches via `rg` (ripgrep), falling back to `grep` and Python `re`, returning merged `±1` neighbor `SrtMatchWindow` citations (`[HH:MM:SS -> HH:MM:SS] text`).
 - **`src/clerk/summarize.py`**: Communicates with local Ollama `/api/generate` endpoint, handles smart transcript splitting by sentence/clause boundaries (`split_transcript_smart`), and parses summary section markdown headers.
 - **`src/clerk/transcribe.py`**: Loads `WhisperModel` and `BatchedInferencePipeline` from `faster-whisper`, formats SRT blocks, and generates transcript metadata (language, duration, VAD coverage).
 - **`src/clerk/ui.py`**: Encapsulates all modern visual and interactive terminal presentation using `rich` and `questionary`. Provides startup branding banners, configuration panels, live execution step spinners, completion summary cards, Markdown previews, and keyboard-navigable interactive recovery prompts with seamless non-interactive fallbacks.
